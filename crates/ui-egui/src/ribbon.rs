@@ -37,6 +37,7 @@ const _: () = assert!(TITLE_CONTROL_H < TITLE_BAR_H, "title-bar controls keep a 
 
 pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
+    let lang = app.ui.language;
     let ch = TITLE_CONTROL_H;
     egui::Panel::top("title_bar").exact_size(TITLE_BAR_H).frame(egui::Frame::NONE.fill(t.window)).show(ui, |ui| {
         let rect = ui.max_rect();
@@ -52,14 +53,14 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
         ui.horizontal_centered(|ui| {
             ui.add_space(TITLE_LEFT_PAD);
             // AutoSave toggle (saves after each change when the workbook has a file).
-            ui.label(egui::RichText::new("AutoSave").font(theme::ui_font(12.5)).color(t.text_dim));
+            ui.label(egui::RichText::new(lang.tr("AutoSave")).font(theme::ui_font(12.5)).color(t.text_dim));
             let on = app.grid.autosave();
             let (r, resp) = ui.allocate_exact_size(vec2(30.0, 16.0), Sense::click());
             ui.painter().rect_filled(r, 8.0, if on { t.accent } else { Color32::TRANSPARENT });
             ui.painter().rect_stroke(r, 8.0, Stroke::new(1.0, if on { t.accent } else { t.text_dim }), StrokeKind::Inside);
             let knob = if on { pos2(r.right() - 8.0, r.center().y) } else { pos2(r.left() + 8.0, r.center().y) };
             ui.painter().circle_filled(knob, 5.0, if on { Color32::WHITE } else { t.text_dim });
-            if resp.on_hover_text("AutoSave: save after every change (workbooks saved to a file)").clicked() {
+            if resp.on_hover_text(lang.tr("AutoSave: save after every change (workbooks saved to a file)")).clicked() {
                 app.grid.toggle_autosave();
             }
             ui.add_space(6.0);
@@ -84,10 +85,10 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
                 let labels: Vec<String> =
                     app.session.active().map(|d| d.undo.iter().rev().take(20).map(|e| e.label.clone()).collect()).unwrap_or_default();
                 if labels.is_empty() {
-                    ui.label("Can't Undo");
+                    ui.label(lang.tr("Can't Undo"));
                 }
                 for (i, l) in labels.iter().enumerate() {
-                    if ui.button(format!("Undo {l}")).clicked() {
+                    if ui.button(format!("{} {l}", lang.tr("Undo"))).clicked() {
                         app.run_or_alert("edit.undo", json!({"steps": i + 1}));
                     }
                 }
@@ -98,17 +99,17 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
             let more = icon_button(ui, Icon::More, t.text_dim, "More commands", vec2(26.0, ch));
             egui::Popup::menu(&more).show(|ui| {
                 for (label, id) in [
-                    ("New Workbook", "file.new"),
-                    ("Open…", "file.open"),
-                    ("Save As…", "file.saveAs"),
-                    ("Sort A to Z", "data.sortAscending"),
-                    ("Calculate Now", "formulas.calculateNow"),
+                    (lang.tr("New Workbook"), "file.new"),
+                    (lang.tr("Open…"), "file.open"),
+                    (lang.tr("Save As…"), "file.saveAs"),
+                    (lang.tr("Sort A to Z"), "data.sortAscending"),
+                    (lang.tr("Calculate Now"), "formulas.calculateNow"),
                 ] {
                     if ui.button(label).clicked() {
                         app.run_or_alert(id, json!({}));
                     }
                 }
-                if ui.button("Print…").clicked() {
+                if ui.button(lang.tr("Print…")).clicked() {
                     app.print_now(json!({}));
                 }
             });
@@ -131,13 +132,12 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
                 }
                 let share = small_button(ui, Icon::Share, "Share", "Share: export or save a copy", true);
                 egui::Popup::menu(&share).show(|ui| {
-                    let lang = app.ui.language;
                     for (label, fmt) in [
-                        ("Save a Copy as Excel Workbook (.xlsx)...", "xlsx"),
-                        ("Export as CSV...", "csv"),
-                        ("Export as Web Page (.html)...", "html"),
+                        (lang.tr("Save a Copy as Excel Workbook (.xlsx)..."), "xlsx"),
+                        (lang.tr("Export as CSV..."), "csv"),
+                        (lang.tr("Export as Web Page (.html)..."), "html"),
                     ] {
-                        if ui.button(format!("{}…", lang.tr(label))).clicked() {
+                        if ui.button(format!("{label}…")).clicked() {
                             app.open_dialog("saveCopy", json!({"format": fmt}));
                         }
                     }
@@ -149,10 +149,9 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
                 }
                 // Quick light/dark switch (#194); right-click offers System as well. The same
                 // choice lives in File › Display theme and the View tab.
-                let lang = app.ui.language;
                 let theme = icon_button(ui, Icon::Appearance, t.text_dim, "Dark Mode", vec2(28.0, 26.0));
                 let dark = ui.ctx().theme() == egui::Theme::Dark;
-                theme.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, dark, lang.tr("Dark Mode")));
+                theme.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, dark, "Dark Mode"));
                 if theme.clicked() {
                     act(app, "view.darkMode", json!({}));
                 }
@@ -1365,6 +1364,8 @@ fn cell_style_gallery(app: &mut SheetApp, ui: &mut Ui) {
 }
 
 fn insert(app: &mut SheetApp, ui: &mut Ui) {
+    let lang = app.ui.language;
+
     let __k = big_button(ui, Icon::PivotTable, "PivotTable", "PivotTable", false);
     control_keytip(app, ui, &__k, "insert.pivotTable");
     if __k.clicked() {
@@ -1376,12 +1377,12 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
         act(app, "insert.table", json!({}));
     }
     sep(ui);
-    let pic = big_button(ui, Icon::Picture, "Pictures", "Insert a picture", true);
+    let pic = big_button(ui, Icon::Picture, "Pictures", "Insert a Picture", true);
     anchor_keytip(app, ui, &pic, &["insert.picture"]);
     pic.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Pictures"));
     egui::Popup::menu(&pic).show(|ui| {
         for (label, placement) in [("Place in Cell", "cell"), ("Place over Cells", "overCells")] {
-            if ui.button(label).clicked() {
+            if ui.button(lang.tr(label)).clicked() {
                 app.open_dialog("insertPicture", json!({"placement": placement}));
                 ui.close();
             }
@@ -1399,7 +1400,7 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
             ("Arrow", "arrow"),
             ("Text Box", "textBox"),
         ] {
-            if ui.button(label).clicked() {
+            if ui.button(lang.tr(label)).clicked() {
                 act(app, "insert.shape", json!({"kind": kind}));
             }
         }
@@ -1439,11 +1440,11 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
                     "Column or Bar",
                     "insert.chart.column",
                     vec![
-                        ("Clustered Column", "column", ""),
-                        ("Stacked Column", "column", "stacked"),
-                        ("100% Stacked Column", "column", "stacked100"),
-                        ("Clustered Bar", "bar", ""),
-                        ("Stacked Bar", "bar", "stacked"),
+                        (lang.tr("Clustered Column"), "column", ""),
+                        (lang.tr("Stacked Column"), "column", "stacked"),
+                        (lang.tr("100% Stacked Column"), "column", "stacked100"),
+                        (lang.tr("Clustered Bar"), "bar", ""),
+                        (lang.tr("Stacked Bar"), "bar", "stacked"),
                     ],
                 ),
                 (
@@ -1451,14 +1452,18 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
                     "Line or Area",
                     "insert.chart.line",
                     vec![
-                        ("Line", "line", ""),
-                        ("Line with Markers", "line", "markers"),
-                        ("Stacked Line", "line", "stacked"),
-                        ("Area", "area", ""),
-                        ("Stacked Area", "area", "stacked"),
+                        (lang.tr("Line"), "line", ""),
+                        (lang.tr("Line with Markers"), "line", "markers"),
+                        (lang.tr("Stacked Line"), "line", "stacked"),
+                        (lang.tr("Area"), "area", ""),
+                        (lang.tr("Stacked Area"), "area", "stacked"),
                     ],
                 ),
-                (Icon::ChartPie, "Pie or Doughnut", "insert.chart.pie", vec![("Pie", "pie", ""), ("Doughnut", "doughnut", "")]),
+                (Icon::ChartPie,
+                    "Pie or Doughnut", "insert.chart.pie",
+                    vec![
+                        (lang.tr("Pie"), "pie", ""),
+                        (lang.tr("Doughnut"), "doughnut", "")]),
             ] {
                 let r = small_button(ui, icon, "", tip, true);
                 control_keytip(app, ui, &r, cid);
@@ -1475,24 +1480,30 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
         ui.horizontal(|ui| {
             for (icon, tip, cid, subs) in [
                 (
-                    Icon::ChartScatter,
+                Icon::ChartScatter,
                     "Scatter or Bubble",
                     "insert.chart.scatter",
-                    vec![("Scatter", "scatter", ""), ("Scatter with Lines", "scatter", "lines"), ("Bubble", "bubble", "")],
+                    vec![(lang.tr("Scatter"), "scatter", ""),
+                        (lang.tr("Scatter with Lines"), "scatter", "lines"),
+                        (lang.tr("Bubble"), "bubble", "")],
                 ),
-                (Icon::Chart, "Statistic", "insert.chart.statistic", vec![("Histogram", "histogram", ""), ("Box & Whisker", "boxWhisker", "")]),
+                (Icon::Chart,
+                    "Statistic",
+                    "insert.chart.statistic",
+                    vec![(lang.tr("Histogram"), "histogram", ""),
+                        (lang.tr("Box & Whisker"), "boxWhisker", "")]),
                 (
                     Icon::Theme,
                     "Hierarchy & more",
                     "insert.chart.hierarchy",
                     vec![
-                        ("Treemap", "treemap", ""),
-                        ("Sunburst", "sunburst", ""),
-                        ("Waterfall", "waterfall", ""),
-                        ("Funnel", "funnel", ""),
-                        ("Radar", "radar", ""),
-                        ("Stock", "stock", ""),
-                        ("Combo", "combo", ""),
+                        (lang.tr("Treemap"), "treemap", ""),
+                        (lang.tr("Sunburst"), "sunburst", ""),
+                        (lang.tr("Waterfall"), "waterfall", ""),
+                        (lang.tr("Funnel"), "funnel", ""),
+                        (lang.tr("Radar"), "radar", ""),
+                        (lang.tr("Stock"), "stock", ""),
+                        (lang.tr("Combo"), "combo", ""),
                     ],
                 ),
             ] {
@@ -1517,7 +1528,10 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
     let sp = big_button(ui, Icon::Sparkline, "Sparklines", "Sparklines", true);
     anchor_keytip(app, ui, &sp, &["dialog:sparkline"]);
     egui::Popup::menu(&sp).show(|ui| {
-        for (label, kind) in [("Line", "line"), ("Column", "column"), ("Win/Loss", "winLoss")] {
+        for (label, kind) in [
+                (lang.tr("Line"), "line"),
+                (lang.tr("Column"), "column"),
+                (lang.tr("Win/Loss"), "winLoss")] {
             if ui.button(label).clicked() {
                 app.open_dialog("sparkline", json!({"type": kind}));
             }
