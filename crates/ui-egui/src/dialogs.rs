@@ -686,7 +686,7 @@ impl Dialog {
                 let recs = match app.session.run("insert.chartRecommendations", json!({})) {
                     Ok(r) => r,
                     Err(e) => {
-                        app.message = Some(("Insert Chart".into(), crate::clean_error(&e)));
+                        app.message = Some(("Insert Chart".into(), crate::clean_error_for(app.ui.language, &e)));
                         return None;
                     }
                 };
@@ -1277,7 +1277,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                 d.values.insert("password".into(), json!(""));
                 app.message = Some((d.title.clone(), crate::clean_error(&e)));
             }
-            Err(e) => app.message = Some((d.title.clone(), crate::clean_error(&e))),
+            Err(e) => app.message = Some((d.title.clone(), crate::clean_error_for(app.ui.language, &e))),
         }
     } else if confirm {
         open = false;

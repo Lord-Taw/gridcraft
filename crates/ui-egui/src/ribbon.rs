@@ -1384,10 +1384,10 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
     sep(ui);
     let pic = big_button(ui, Icon::Picture, "Pictures", "Insert a Picture", true);
     anchor_keytip(app, ui, &pic, &["insert.picture"]);
-    pic.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Pictures"));
+    pic.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), lang.tr("Pictures")));
     egui::Popup::menu(&pic).show(|ui| {
-        for (label, placement) in [("Place in Cell", "cell"), ("Place over Cells", "overCells")] {
-            if ui.button(lang.tr(label)).clicked() {
+        for (label, placement) in [(lang.tr("Place in Cell"), "cell"), (lang.tr("Place over Cells"), "overCells")] {
+            if ui.button(label).clicked() {
                 app.open_dialog("insertPicture", json!({"placement": placement}));
                 ui.close();
             }
@@ -1397,15 +1397,15 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
     anchor_keytip(app, ui, &shapes, &["insert.shape"]);
     egui::Popup::menu(&shapes).show(|ui| {
         for (label, kind) in [
-            ("Rectangle", "rectangle"),
-            ("Rounded Rectangle", "roundedRectangle"),
-            ("Oval", "ellipse"),
-            ("Triangle", "triangle"),
-            ("Line", "line"),
-            ("Arrow", "arrow"),
-            ("Text Box", "textBox"),
+            (lang.tr("Rectangle"), "rectangle"),
+            (lang.tr("Rounded Rectangle"), "roundedRectangle"),
+            (lang.tr("Oval"), "ellipse"),
+            (lang.tr("Triangle"), "triangle"),
+            (lang.tr("Line"), "line"),
+            (lang.tr("Arrow"), "arrow"),
+            (lang.tr("Text Box"), "textBox"),
         ] {
-            if ui.button(lang.tr(label)).clicked() {
+            if ui.button(label).clicked() {
                 act(app, "insert.shape", json!({"kind": kind}));
             }
         }
@@ -1421,7 +1421,7 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
                     ui.painter().rect_filled(r, 4.0, Tokens::get(ui.ctx()).hover);
                 }
                 icons::paint(ui.painter(), r.shrink(6.0), *icon, Tokens::get(ui.ctx()).text);
-                if resp.on_hover_text(*name).clicked() {
+                if resp.on_hover_text(lang.tr(name)).clicked() {
                     act(app, "insert.icons", json!({"name": name}));
                     ui.close();
                 }
@@ -1440,7 +1440,7 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
             // in dialogs.rs) — otherwise the prior cell/range selection is left in place, and
             // Del right after inserting deletes the source data instead of the chart.
             Ok(r) => app.selected_chart = r.get("chart").and_then(serde_json::Value::as_u64).and_then(|id| u32::try_from(id).ok()),
-            Err(e) => app.message = Some(("GridCraft".into(), crate::clean_error(&e))),
+            Err(e) => app.message = Some(("GridCraft".into(), crate::clean_error_for(app.ui.language, &e))),
         }
     }
     ui.vertical(|ui| {
@@ -1470,11 +1470,7 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
                         (lang.tr("Stacked Area"), "area", "stacked"),
                     ],
                 ),
-                (Icon::ChartPie,
-                    "Pie or Doughnut", "insert.chart.pie",
-                    vec![
-                        (lang.tr("Pie"), "pie", ""),
-                        (lang.tr("Doughnut"), "doughnut", "")]),
+                (Icon::ChartPie, "Pie or Doughnut", "insert.chart.pie", vec![(lang.tr("Pie"), "pie", ""), (lang.tr("Doughnut"), "doughnut", "")]),
             ] {
                 let r = small_button(ui, icon, "", tip, true);
                 control_keytip(app, ui, &r, cid);
@@ -1491,18 +1487,17 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
         ui.horizontal(|ui| {
             for (icon, tip, cid, subs) in [
                 (
-                Icon::ChartScatter,
+                    Icon::ChartScatter,
                     "Scatter or Bubble",
                     "insert.chart.scatter",
-                    vec![(lang.tr("Scatter"), "scatter", ""),
-                        (lang.tr("Scatter with Lines"), "scatter", "lines"),
-                        (lang.tr("Bubble"), "bubble", "")],
+                    vec![(lang.tr("Scatter"), "scatter", ""), (lang.tr("Scatter with Lines"), "scatter", "lines"), (lang.tr("Bubble"), "bubble", "")],
                 ),
-                (Icon::Chart,
+                (
+                    Icon::Chart,
                     "Statistic",
                     "insert.chart.statistic",
-                    vec![(lang.tr("Histogram"), "histogram", ""),
-                        (lang.tr("Box & Whisker"), "boxWhisker", "")]),
+                    vec![(lang.tr("Histogram"), "histogram", ""), (lang.tr("Box & Whisker"), "boxWhisker", "")],
+                ),
                 (
                     Icon::Theme,
                     "Hierarchy & more",
@@ -1532,17 +1527,15 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
         });
     });
     sep(ui);
-    if big_button(ui, Icon::Filter, "Slicer", "Insert a slicer to filter a table", false).clicked() {
+    let slicer_tip = lang.tr("Insert a slicer to filter a table");
+    if big_button(ui, Icon::Filter, "Slicer", slicer_tip, false).clicked() {
         act(app, "insert.slicer", json!({}));
     }
     sep(ui);
     let sp = big_button(ui, Icon::Sparkline, "Sparklines", "Sparklines", true);
     anchor_keytip(app, ui, &sp, &["dialog:sparkline"]);
     egui::Popup::menu(&sp).show(|ui| {
-        for (label, kind) in [
-                (lang.tr("Line"), "line"),
-                (lang.tr("Column"), "column"),
-                (lang.tr("Win/Loss"), "winLoss")] {
+        for (label, kind) in [(lang.tr("Line"), "line"), (lang.tr("Column"), "column"), (lang.tr("Win/Loss"), "winLoss")] {
             if ui.button(label).clicked() {
                 app.open_dialog("sparkline", json!({"type": kind}));
             }
