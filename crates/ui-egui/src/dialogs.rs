@@ -95,6 +95,7 @@ impl Dialog {
     }
 
     pub fn open(app: &mut SheetApp, name: &str, params: Json) -> Option<Dialog> {
+        let lang = app.ui.language;
         let sel = app.session.active().map(|d| d.selection.current().a1()).unwrap_or_default();
         let active = app.session.active().map(|d| d.selection.active.a1()).unwrap_or_default();
         let p = |k: &str| params.get(k).cloned().unwrap_or(Json::Null);
@@ -102,70 +103,84 @@ impl Dialog {
         let d = match name {
             "insertCells" => Dialog::form(
                 "insertCells",
-                "Insert",
+                lang.tr("Insert"),
                 "home.insertCells",
                 vec![Choice {
                     key: "shift",
-                    label: "Insert",
-                    options: vec![("right", "Shift cells right"), ("down", "Shift cells down"), ("row", "Entire row"), ("column", "Entire column")],
+                    label: lang.tr("Insert"),
+                    options: vec![
+                        ("right", lang.tr("Shift cells right")),
+                        ("down", lang.tr("Shift cells down")),
+                        ("row", lang.tr("Entire row")),
+                        ("column", lang.tr("Entire column")),
+                    ],
                 }],
                 json!({"shift": "down"}),
             ),
             "insertPaste" => Dialog::form(
                 "insertPaste",
-                "Insert Paste",
+                lang.tr("Insert Paste"),
                 "home.insertCopiedCells",
-                vec![Choice { key: "shift", label: "Insert", options: vec![("right", "Shift cells right"), ("down", "Shift cells down")] }],
+                vec![Choice {
+                    key: "shift",
+                    label: lang.tr("Insert"),
+                    options: vec![("right", lang.tr("Shift cells right")), ("down", lang.tr("Shift cells down"))],
+                }],
                 json!({"shift": "down"}),
             ),
             "deleteCells" => Dialog::form(
                 "deleteCells",
-                "Delete",
+                lang.tr("Delete"),
                 "home.deleteCells",
                 vec![Choice {
                     key: "shift",
-                    label: "Delete",
-                    options: vec![("left", "Shift cells left"), ("up", "Shift cells up"), ("row", "Entire row"), ("column", "Entire column")],
+                    label: lang.tr("Delete"),
+                    options: vec![
+                        ("left", lang.tr("Shift cells left")),
+                        ("up", lang.tr("Shift cells up")),
+                        ("row", lang.tr("Entire row")),
+                        ("column", lang.tr("Entire column")),
+                    ],
                 }],
                 json!({"shift": "up"}),
             ),
             "rowHeight" => Dialog::form(
                 "rowHeight",
-                "Row Height",
+                lang.tr("Row Height"),
                 "home.rowHeight",
-                vec![Number { key: "height", label: "Row height (pixels):" }],
+                vec![Number { key: "height", label: lang.tr("Row height (pixels):") }],
                 json!({"height": app.session.active().and_then(|d| d.wb.active().map(|s| s.row_height(d.selection.active.row))).unwrap_or(20.0)}),
             ),
             "columnWidth" => Dialog::form(
                 "columnWidth",
-                "Column Width",
+                lang.tr("Column Width"),
                 "home.columnWidth",
-                vec![Number { key: "chars", label: "Column width (characters):" }],
+                vec![Number { key: "chars", label: lang.tr("Column width (characters):") }],
                 json!({"chars": app.session.active().and_then(|d| d.wb.active().map(|s| gridcraft_engine::cmd::format::points_to_chars(s.col_width(d.selection.active.col) as f64))).unwrap_or(8.43)}),
             ),
             "defaultWidth" => Dialog::form(
                 "defaultWidth",
-                "Standard Width",
+                lang.tr("Standard Width"),
                 "home.defaultWidth",
-                vec![Number { key: "width", label: "Standard column width (pixels):" }],
+                vec![Number { key: "width", label: lang.tr("Standard column width (pixels):") }],
                 json!({"width": 64}),
             ),
             "renameSheet" => Dialog::form(
                 "renameSheet",
-                "Rename Sheet",
+                lang.tr("Rename Sheet"),
                 "sheet.rename",
-                vec![Text { key: "name", label: "Name:" }],
+                vec![Text { key: "name", label: lang.tr("Name:") }],
                 json!({"name": app.session.active().and_then(|d| d.wb.active().map(|s| s.name.clone()))}),
             ),
             "moveSheet" => {
                 let sheets: Vec<String> = app.session.active().map(|d| d.wb.sheets.iter().map(|s| s.name.clone()).collect()).unwrap_or_default();
                 let mut d = Dialog::form(
                     "moveSheet",
-                    "Move or Copy",
+                    lang.tr("Move or Copy"),
                     "sheet.move",
                     vec![
-                        Number { key: "to", label: "Before sheet (position, 0 = first):" },
-                        Check { key: "copy", label: "Create a copy" },
+                        Number { key: "to", label: lang.tr("Before sheet (position, 0 = first):") },
+                        Check { key: "copy", label: lang.tr("Create a copy") },
                         Note(format!("Sheets: {}", sheets.join(", "))),
                     ],
                     json!({"to": 0, "copy": false}),
@@ -650,20 +665,20 @@ impl Dialog {
                 "edit.goToSpecial",
                 vec![Choice {
                     key: "kind",
-                    label: "Select",
+                    label: lang.tr("Select"),
                     options: vec![
-                        ("blanks", "Blanks"),
-                        ("constants", "Constants"),
-                        ("formulas", "Formulas"),
-                        ("notes", "Notes"),
-                        ("errors", "Errors"),
-                        ("numbers", "Numbers"),
-                        ("text", "Text"),
-                        ("currentRegion", "Current region"),
-                        ("lastCell", "Last cell"),
-                        ("visible", "Visible cells only"),
-                        ("conditionalFormats", "Conditional formats"),
-                        ("dataValidation", "Data validation"),
+                        ("blanks", lang.tr("Blanks")),
+                        ("constants", lang.tr("Constants")),
+                        ("formulas", lang.tr("Formulas")),
+                        ("notes", lang.tr("Notes")),
+                        ("errors", lang.tr("Errors")),
+                        ("numbers", lang.tr("Numbers")),
+                        ("text", lang.tr("Text")),
+                        ("currentRegion", lang.tr("Current region")),
+                        ("lastCell", lang.tr("Last cell")),
+                        ("visible", lang.tr("Visible cells only")),
+                        ("conditionalFormats", lang.tr("Conditional formats")),
+                        ("dataValidation", lang.tr("Data validation")),
                     ],
                 }],
                 json!({"kind": "blanks"}),
@@ -1801,9 +1816,10 @@ fn insert_function(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confir
 }
 
 fn find(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog) {
+    let lang = app.ui.language;
     ui.horizontal(|ui| {
-        for tab in ["Find", "Replace"] {
-            if ui.selectable_label(d.tab == tab, tab).clicked() {
+        for (tab, label) in [("Find", "Find"), ("Replace", "Replace")] {
+            if ui.selectable_label(d.tab == tab, lang.tr(label)).clicked() {
                 d.tab = tab.into();
             }
         }
@@ -1811,12 +1827,12 @@ fn find(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog) {
     let mut what = d.values.get("what").and_then(Json::as_str).unwrap_or("").to_string();
     let mut with = d.values.get("with").and_then(Json::as_str).unwrap_or("").to_string();
     ui.horizontal(|ui| {
-        ui.label("Find what:");
+        ui.label(lang.tr("Find what:"));
         ui.add(egui::TextEdit::singleline(&mut what).desired_width(260.0));
     });
     if d.tab == "Replace" {
         ui.horizontal(|ui| {
-            ui.label("Replace with:");
+            ui.label(lang.tr("Replace with:"));
             ui.add(egui::TextEdit::singleline(&mut with).desired_width(244.0));
         });
     }
@@ -1824,9 +1840,9 @@ fn find(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog) {
     let mut whole = d.values.get("wholeCell").and_then(Json::as_bool).unwrap_or(false);
     let mut wb = d.values.get("within").and_then(Json::as_str) == Some("workbook");
     ui.horizontal(|ui| {
-        ui.checkbox(&mut case, "Match case");
-        ui.checkbox(&mut whole, "Match entire cell contents");
-        ui.checkbox(&mut wb, "Within workbook");
+        ui.checkbox(&mut case, lang.tr("Match case"));
+        ui.checkbox(&mut whole, lang.tr("Match entire cell contents"));
+        ui.checkbox(&mut wb, lang.tr("Within workbook"));
     });
     d.values.insert("what".into(), json!(what));
     d.values.insert("with".into(), json!(with));
@@ -1836,7 +1852,7 @@ fn find(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog) {
     let base = json!({"what": what, "matchCase": case, "wholeCell": whole, "within": if wb { "workbook" } else { "sheet" }});
     ui.horizontal(|ui| {
         if d.tab == "Replace" {
-            if ui.button("Replace All").clicked() {
+            if ui.button(lang.tr("Replace All")).clicked() {
                 let mut p = base.clone();
                 p["with"] = json!(with);
                 p["all"] = json!(true);
@@ -1845,7 +1861,7 @@ fn find(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog) {
                     Err(e) => app.message = Some(("Find and Replace".into(), crate::clean_error(&e))),
                 }
             }
-            if ui.button("Replace").clicked() {
+            if ui.button(lang.tr("Replace")).clicked() {
                 let mut p = base.clone();
                 p["with"] = json!(with);
                 p["all"] = json!(false);
@@ -1853,12 +1869,12 @@ fn find(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog) {
                 let _ = app.run("edit.find", base.clone());
             }
         }
-        if ui.button("Find All").clicked() {
+        if ui.button(lang.tr("Find All")).clicked() {
             let mut p = base.clone();
             p["all"] = json!(true);
             d.result = app.run("edit.find", p).ok();
         }
-        if ui.button("Find Next").clicked() || ui.input(|i| i.key_pressed(Key::Enter)) {
+        if ui.button(lang.tr("Find Next")).clicked() || ui.input(|i| i.key_pressed(Key::Enter)) {
             if let Err(e) = app.run("edit.find", base.clone()) {
                 app.message = Some(("Find and Replace".into(), crate::clean_error(&e)));
             }

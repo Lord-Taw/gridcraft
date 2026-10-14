@@ -501,6 +501,7 @@ fn menu_items(app: &mut SheetApp, ui: &mut Ui, items: &[(&str, &str, serde_json:
 }
 
 fn home(app: &mut SheetApp, ui: &mut Ui) {
+    let lang = app.ui.language;
     let t = Tokens::get(ui.ctx());
     let st = active_style(app);
     // Clipboard
@@ -1023,13 +1024,13 @@ fn home(app: &mut SheetApp, ui: &mut Ui) {
             app,
             ui,
             &[
-                ("Sort A to Z", "data.sortAscending", json!({})),
-                ("Sort Z to A", "data.sortDescending", json!({})),
-                ("Custom Sort…", "dialog:sort", json!({})),
+                (lang.tr("Sort A to Z"), "data.sortAscending", json!({})),
+                (lang.tr("Sort Z to A"), "data.sortDescending", json!({})),
+                (lang.tr("Custom Sort…"), "dialog:sort", json!({})),
                 ("-", "", json!(null)),
-                ("Filter", "data.filter", json!({})),
-                ("Clear", "data.clearFilter", json!({})),
-                ("Reapply", "data.reapply", json!({})),
+                (lang.tr("Filter"), "data.filter", json!({})),
+                (lang.tr("Clear"), "data.clearFilter", json!({})),
+                (lang.tr("Reapply"), "data.reapply", json!({})),
             ],
         );
     });
@@ -1045,16 +1046,16 @@ fn home(app: &mut SheetApp, ui: &mut Ui) {
             app,
             ui,
             &[
-                ("Find…", "dialog:find", json!({})),
-                ("Replace…", "dialog:find", json!({"replace": true})),
-                ("Go To…", "dialog:goTo", json!({})),
-                ("Go To Special…", "dialog:goToSpecial", json!({})),
+                (lang.tr("Find…"), "dialog:find", json!({})),
+                (lang.tr("Replace…"), "dialog:find", json!({"replace": true})),
+                (lang.tr("Go To…"), "dialog:goTo", json!({})),
+                (lang.tr("Go To Special…"), "dialog:goToSpecial", json!({})),
                 ("-", "", json!(null)),
-                ("Formulas", "edit.goToSpecial", json!({"kind": "formulas"})),
-                ("Notes", "edit.goToSpecial", json!({"kind": "notes"})),
-                ("Conditional Formatting", "edit.goToSpecial", json!({"kind": "conditionalFormats"})),
-                ("Constants", "edit.goToSpecial", json!({"kind": "constants"})),
-                ("Data Validation", "edit.goToSpecial", json!({"kind": "dataValidation"})),
+                (lang.tr("Formulas"), "edit.goToSpecial", json!({"kind": "formulas"})),
+                (lang.tr("Notes"), "edit.goToSpecial", json!({"kind": "notes"})),
+                (lang.tr("Conditional Formatting"), "edit.goToSpecial", json!({"kind": "conditionalFormats"})),
+                (lang.tr("Constants"), "edit.goToSpecial", json!({"kind": "constants"})),
+                (lang.tr("Data Validation"), "edit.goToSpecial", json!({"kind": "dataValidation"})),
             ],
         );
     });
@@ -1141,67 +1142,78 @@ fn number_combo(app: &mut SheetApp, ui: &mut Ui, st: &Style) {
 }
 
 fn cf_menu(app: &mut SheetApp, ui: &mut Ui) {
-    ui.menu_button("Highlight Cells Rules", |ui| {
-        for (label, op) in [("Greater Than…", "greater"), ("Less Than…", "less"), ("Between…", "between"), ("Equal To…", "equal")] {
+    let lang = app.ui.language;
+    ui.menu_button(format!("{}...", lang.tr("Highlight Cells Rules")), |ui| {
+        for (label, op) in [
+            (lang.tr("Greater Than…"), "greater"),
+            (lang.tr("Less Than…"), "less"),
+            (lang.tr("Between…"), "between"),
+            (lang.tr("Equal To…"), "equal"),
+        ] {
             if ui.button(label).clicked() {
                 app.open_dialog("cfQuick", json!({"type": "cellIs", "operator": op, "title": label}));
             }
         }
-        if ui.button("Text that Contains…").clicked() {
-            app.open_dialog("cfQuick", json!({"type": "containsText", "title": "Text that Contains"}));
+        if ui.button(lang.tr("Text that Contains…")).clicked() {
+            app.open_dialog("cfQuick", json!({"type": "containsText", "title": lang.tr("Text that Contains")}));
         }
-        if ui.button("A Date Occurring…").clicked() {
-            app.open_dialog("cfQuick", json!({"type": "timePeriod", "title": "A Date Occurring"}));
+        if ui.button(lang.tr("A Date Occurring…")).clicked() {
+            app.open_dialog("cfQuick", json!({"type": "timePeriod", "title": lang.tr("A Date Occurring")}));
         }
-        if ui.button("Duplicate Values…").clicked() {
+        if ui.button(lang.tr("Duplicate Values…")).clicked() {
             act(app, "home.conditionalFormat", json!({"rule": {"type": "duplicate"}}));
         }
     });
-    ui.menu_button("Top/Bottom Rules", |ui| {
+    ui.menu_button(lang.tr("Top/Bottom Rules"), |ui| {
         menu_items(
             app,
             ui,
             &[
-                ("Top 10 Items", "home.conditionalFormat", json!({"rule": {"type": "top10", "rank": 10}})),
-                ("Top 10%", "home.conditionalFormat", json!({"rule": {"type": "top10", "rank": 10, "percent": true}})),
-                ("Bottom 10 Items", "home.conditionalFormat", json!({"rule": {"type": "top10", "rank": 10, "bottom": true}})),
-                ("Bottom 10%", "home.conditionalFormat", json!({"rule": {"type": "top10", "rank": 10, "bottom": true, "percent": true}})),
-                ("Above Average", "home.conditionalFormat", json!({"rule": {"type": "aboveAverage"}})),
-                ("Below Average", "home.conditionalFormat", json!({"rule": {"type": "aboveAverage", "below": true}})),
+                (lang.tr("Top 10 Items"), "home.conditionalFormat", json!({"rule": {"type": "top10", "rank": 10}})),
+                (lang.tr("Top 10%"), "home.conditionalFormat", json!({"rule": {"type": "top10", "rank": 10, "percent": true}})),
+                (lang.tr("Bottom 10 Items"), "home.conditionalFormat", json!({"rule": {"type": "top10", "rank": 10, "bottom": true}})),
+                (lang.tr("Bottom 10%"), "home.conditionalFormat", json!({"rule": {"type": "top10", "rank": 10, "bottom": true, "percent": true}})),
+                (lang.tr("Above Average"), "home.conditionalFormat", json!({"rule": {"type": "aboveAverage"}})),
+                (lang.tr("Below Average"), "home.conditionalFormat", json!({"rule": {"type": "aboveAverage", "below": true}})),
             ],
         );
     });
-    ui.menu_button("Data Bars", |ui| {
-        for (label, c) in
-            [("Blue", "#638EC6"), ("Green", "#63BE7B"), ("Red", "#F8696B"), ("Orange", "#FFB628"), ("Light Blue", "#008AEF"), ("Purple", "#D6007B")]
-        {
+    ui.menu_button(lang.tr("Data Bars"), |ui| {
+        for (label, c) in [
+            (lang.tr("Blue"), "#638EC6"),
+            (lang.tr("Green"), "#63BE7B"),
+            (lang.tr("Red"), "#F8696B"),
+            (lang.tr("Orange"), "#FFB628"),
+            (lang.tr("Light Blue"), "#008AEF"),
+            (lang.tr("Purple"), "#D6007B"),
+        ] {
             if ui.button(label).clicked() {
                 act(app, "home.conditionalFormat", json!({"rule": {"type": "dataBar", "color": c}}));
             }
         }
     });
-    ui.menu_button("Color Scales", |ui| {
+    ui.menu_button(lang.tr("Color Scales"), |ui| {
         for (label, cols) in [
-            ("Green - Yellow - Red", vec!["#63BE7B", "#FFEB84", "#F8696B"]),
-            ("Red - Yellow - Green", vec!["#F8696B", "#FFEB84", "#63BE7B"]),
-            ("Green - White - Red", vec!["#63BE7B", "#FCFCFF", "#F8696B"]),
-            ("Blue - White - Red", vec!["#5A8AC6", "#FCFCFF", "#F8696B"]),
-            ("White - Green", vec!["#FCFCFF", "#63BE7B"]),
-            ("White - Red", vec!["#FCFCFF", "#F8696B"]),
+            (lang.tr("Green - Yellow - Red"), vec!["#63BE7B", "#FFEB84", "#F8696B"]),
+            (lang.tr("Red - Yellow - Green"), vec!["#F8696B", "#FFEB84", "#63BE7B"]),
+            (lang.tr("Green - White - Red"), vec!["#63BE7B", "#FCFCFF", "#F8696B"]),
+            (lang.tr("Blue - White - Red"), vec!["#5A8AC6", "#FCFCFF", "#F8696B"]),
+            (lang.tr("White - Green"), vec!["#FCFCFF", "#63BE7B"]),
+            (lang.tr("White - Red"), vec!["#FCFCFF", "#F8696B"]),
         ] {
             if ui.button(label).clicked() {
                 act(app, "home.conditionalFormat", json!({"rule": {"type": "colorScale", "colors": cols}}));
             }
         }
     });
-    ui.menu_button("Icon Sets", |ui| {
+    ui.menu_button(lang.tr("Icon Sets"), |ui| {
         for (label, set) in [
-            ("3 Arrows", "3Arrows"),
-            ("3 Traffic Lights", "3TrafficLights1"),
-            ("3 Symbols", "3Symbols"),
-            ("4 Ratings", "4Rating"),
-            ("5 Arrows", "5Arrows"),
-            ("5 Quarters", "5Quarters"),
+            (lang.tr("3 Arrows"), "3Arrows"),
+            (lang.tr("3 Traffic Lights"), "3TrafficLights1"),
+            (lang.tr("3 Symbols"), "3Symbols"),
+            (lang.tr("4 Ratings"), "4Rating"),
+            (lang.tr("5 Arrows"), "5Arrows"),
+            (lang.tr("5 Quarters"), "5Quarters"),
         ] {
             if ui.button(label).clicked() {
                 act(app, "home.conditionalFormat", json!({"rule": {"type": "iconSet", "set": set}}));
@@ -1209,20 +1221,20 @@ fn cf_menu(app: &mut SheetApp, ui: &mut Ui) {
         }
     });
     ui.separator();
-    if ui.button("New Rule…").clicked() {
-        app.open_dialog("cfQuick", json!({"type": "expression", "title": "New Formatting Rule"}));
+    if ui.button(lang.tr("New Rule…")).clicked() {
+        app.open_dialog("cfQuick", json!({"type": "expression", "title": lang.tr("New Formatting Rule")}));
     }
-    ui.menu_button("Clear Rules", |ui| {
+    ui.menu_button(lang.tr("Clear Rules"), |ui| {
         menu_items(
             app,
             ui,
             &[
-                ("Clear Rules from Selected Cells", "home.clearRules", json!({})),
-                ("Clear Rules from Entire Sheet", "home.clearRules", json!({"sheet": true})),
+                (lang.tr("Clear Rules from Selected Cells"), "home.clearRules", json!({})),
+                (lang.tr("Clear Rules from Entire Sheet"), "home.clearRules", json!({"sheet": true})),
             ],
         );
     });
-    if ui.button("Manage Rules…").clicked() {
+    if ui.button(lang.tr("Manage Rules…")).clicked() {
         app.open_dialog("manageRules", json!({}));
     }
 }
@@ -1230,9 +1242,10 @@ fn cf_menu(app: &mut SheetApp, ui: &mut Ui) {
 /// A gallery of table styles drawn as mini tables.
 fn table_gallery(app: &mut SheetApp, ui: &mut Ui, cmd: &str) {
     ui.set_width(430.0);
+    let lang = app.ui.language;
     let Some(wb) = app.session.active().map(|d| d.wb.clone()) else { return };
     for (fam, n) in [("Light", 21u32), ("Medium", 28), ("Dark", 11)] {
-        ui.label(egui::RichText::new(fam).strong());
+        ui.label(egui::RichText::new(lang.tr(fam)).strong());
         egui::Grid::new(("tg", fam)).spacing(vec2(4.0, 4.0)).show(ui, |ui| {
             for i in 1..=n {
                 let name = format!("TableStyle{fam}{i}");
@@ -1241,7 +1254,7 @@ fn table_gallery(app: &mut SheetApp, ui: &mut Ui, cmd: &str) {
                 if resp.hovered() {
                     ui.painter().rect_stroke(r.expand(1.5), 2.0, Stroke::new(2.0, Color32::from_rgb(0xE8, 0x7D, 0x2B)), StrokeKind::Outside);
                 }
-                if resp.on_hover_text(&name).clicked() {
+                if resp.on_hover_text(format!("{} {i}", lang.tr(fam))).clicked() {
                     act(app, cmd, json!({"style": name}));
                     ui.close();
                 }
@@ -1285,14 +1298,15 @@ fn paint_table_swatch(ui: &Ui, r: Rect, wb: &gridcraft_engine::model::Workbook, 
 }
 
 fn cell_style_gallery(app: &mut SheetApp, ui: &mut Ui) {
+    let lang = app.ui.language;
     ui.set_width(520.0);
     let Some(wb) = app.session.active().map(|d| d.wb.clone()) else { return };
     let groups: &[(&str, &[&str])] = &[
-        ("Good, Bad and Neutral", &["Normal", "Bad", "Good", "Neutral"]),
-        ("Data and Model", &["Calculation", "Check Cell", "Explanatory Text", "Input", "Linked Cell", "Note", "Output", "Warning Text"]),
-        ("Titles and Headings", &["Heading 1", "Heading 2", "Heading 3", "Heading 4", "Title", "Total"]),
+        (lang.tr("Good, Bad and Neutral"), &["Normal", "Bad", "Good", "Neutral"]),
+        (lang.tr("Data and Model"), &["Calculation", "Check Cell", "Explanatory Text", "Input", "Linked Cell", "Note", "Output", "Warning Text"]),
+        (lang.tr("Titles and Headings"), &["Heading 1", "Heading 2", "Heading 3", "Heading 4", "Title", "Total"]),
         (
-            "Themed Cell Styles",
+            lang.tr("Themed Cell Styles"),
             &[
                 "20% - Accent1",
                 "20% - Accent2",
@@ -1320,7 +1334,7 @@ fn cell_style_gallery(app: &mut SheetApp, ui: &mut Ui) {
                 "Accent6",
             ],
         ),
-        ("Number Format", &["Comma", "Comma [0]", "Currency", "Currency [0]", "Percent"]),
+        (lang.tr("Number Format"), &["Comma", "Comma [0]", "Currency", "Currency [0]", "Percent"]),
     ];
     for (g, names) in groups {
         ui.label(egui::RichText::new(*g).strong());
@@ -1349,7 +1363,7 @@ fn cell_style_gallery(app: &mut SheetApp, ui: &mut Ui) {
                 ui.painter().text(
                     r.left_center() + vec2(4.0, 0.0),
                     Align2::LEFT_CENTER,
-                    *n,
+                    lang.tr(n),
                     egui::FontId::new((st.font.size).clamp(10.0, 15.0), fam),
                     col,
                 );
@@ -1621,6 +1635,7 @@ fn draw(app: &mut SheetApp, ui: &mut Ui) {
 }
 
 fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
+    let lang = app.ui.language;
     let th = big_button(ui, Icon::Theme, "Themes", "Themes", true);
     anchor_keytip(app, ui, &th, &["pageLayout.theme"]);
     egui::Popup::menu(&th).show(|ui| {
@@ -1646,10 +1661,10 @@ fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
             app,
             ui,
             &[
-                ("Normal", "pageLayout.margins", json!({"preset": "normal"})),
-                ("Wide", "pageLayout.margins", json!({"preset": "wide"})),
-                ("Narrow", "pageLayout.margins", json!({"preset": "narrow"})),
-                ("Custom Margins…", "dialog:pageSetup", json!({})),
+                (lang.tr("Normal"), "pageLayout.margins", json!({"preset": "normal"})),
+                (lang.tr("Wide"), "pageLayout.margins", json!({"preset": "wide"})),
+                (lang.tr("Narrow"), "pageLayout.margins", json!({"preset": "narrow"})),
+                (lang.tr("Custom Margins…"), "dialog:pageSetup", json!({})),
             ],
         );
     });
