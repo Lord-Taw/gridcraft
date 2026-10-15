@@ -243,9 +243,22 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Eraser" => "Borracha",
         "Ink to\nShape" => "Tinta para\nForma",
         "Select\nObjects" => "Selecionar\nObjetos",
+
+        // Page Layout / Themes
         "Themes" => "Temas",
+        "Theme Colors" => "Cores do Tema",
+            "Craft" => "Craft",
+            "Slate" => "Ardósia",
+            "Meadow" => "Prado",
+            "Ember" => "Brasa",
+            "Ocean" => "Oceano",
+            "Orchid" => "Orquídea",
+            "Graphite" => "Grafite",
+        "Display theme" => "Tema de exibição",
+
+        // Page Layout / Margins, size and orientation
         "Margins" => "Margens",
-        "Wide" => "Ampla",
+        "Wide" => "Larga",
         "Narrow" => "Estreita",
         "Custom Margins…" => "Margens Personalizadas…",
         "Left Margin" => "Margem esquerda",
@@ -255,6 +268,12 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Header Margin" => "Margem do cabeçalho",
         "Footer Margin" => "Margem do rodapé",
         "Size" => "Tamanho",
+        "Paper Size" => "Tamanho do Papel",
+        "Page Layout|Orientation" => "Orientação",
+        "Portrait" => "Retrato",
+        "Landscape" => "Paisagem",
+
+        // Page Layout / Print area and print options
         "Print\nArea" => "Área de\nImpressão",
         "Set Print Area" => "Definir Área de Impressão",
         "Breaks" => "Quebras",
@@ -266,8 +285,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Print\nTitles" => "Imprimir\nTítulos",
         "Sheet\nRight-to-Left" => "Planilha da Direita\npara a Esquerda",
         "Sheet Right-to-Left" => "Planilha da Direita para a Esquerda",
-        "Portrait" => "Retrato",
-        "Landscape" => "Paisagem",
+
         "Insert\nFunction" => "Inserir\nFunção",
         "Name\nManager" => "Gerenciador\nde Nomes",
         "Define Name" => "Definir Nome",
@@ -409,8 +427,6 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Lookup &\nReference" => "Pesquisa e\nReferência",
         "Math &\nTrig" => "Matemática e\nTrigonometria",
         "More\nFunctions" => "Mais\nFunções",
-        "Page Layout|Orientation" => "Orientação",
-        "Display theme" => "Tema de exibição",
         "Animations" => "Animações",
         "Glide the selection outline to the cell you move to instead of jumping there" => {
             "Desliza o contorno da seleção até a nova célula em vez de saltar"
@@ -586,6 +602,17 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Agent Control" => "Controle por Agentes",
         "About GridCraft" => "Sobre o GridCraft",
         "Insert Chart" => "Inserir Gráfico",
+        "A table can't overlap another table." => "Uma tabela não pode se sobrepor a outra tabela.",
+        "Multi-cell array formulas aren't allowed in tables." => "Fórmulas de matriz de várias células não são permitidas em tabelas.",
+        "The name that you entered is not valid." => "O nome que você digitou não é válido.",
+        "The name entered already exists. Enter a unique name." => "O nome digitado já existe. Digite um nome único.",
+        "This operation isn't allowed: it would shift cells in a table on your worksheet." => "Essa operação não é permitida: ela deslocaria células em uma tabela na sua planilha.",
+        "To prevent possible loss of data, cells can't be pushed off the end of the worksheet." => "Para evitar possível perda de dados, as células não podem ser empurradas para fora do fim da planilha.",
+        "range too large" => "intervalo muito grande",
+        "range too large for a chart" => "intervalo muito grande para um gráfico",
+        "a stroke needs at least two points" => "um traço precisa de pelo menos dois pontos",
+        "no ink stroke to convert" => "não há traço de tinta para converter",
+        "gone" => "foi removido",
         "Select Data Source" => "Selecionar Fonte de Dados",
         "Action Journal" => "Registro de Ações",
         "Macros" => "Macros",
@@ -702,7 +729,6 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Locking cells or hiding formulas has no effect until you protect the worksheet (Review › Protect Sheet)." => {
             "Bloquear células ou ocultar fórmulas não tem efeito até que você proteja a planilha (Revisão › Proteger Planilha)."
         }
-        "Theme Colors" => "Cores do Tema",
         "Insert a Picture" => "Inserir uma Imagem",
         "Insert a picture" => "Inserir uma Imagem",
         "Place in Cell" => "Colocar na célula",
@@ -1103,7 +1129,6 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Previous sheet" => "Planilha Anterior",
         "Pick From Drop-down List…" => "Escolher na Lista Suspensa…",
         "Pick From Drop-down List" => "Escolher na Lista Suspensa",
-        "Paper Size" => "Tamanho do Papel",
         "Next sheet" => "Próxima Planilha",
         "New sheet (⇧F11)" => "Nova planilha (Shift + F11)",
         "Macros and scripts in this workbook (Alt+F8)" => "Macros e scripts nesta planilha (Alt + F8)",
@@ -1133,6 +1158,11 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Calculation Options" => "Opções de Cálculo",
         "Select data for the chart first." => "Selecione os dados para o gráfico primeiro.",
         "Select data for the chart first" => "Selecione os dados para o gráfico primeiro",
+        "Letter" => "Carta",
+        "Legal" => "Ofício",
+        "Tabloid" => "Tablóide",
+        "Executive" => "Executivo",
+        "No comments on this sheet yet. Select a cell and choose New Comment." => "Ainda não há comentários nesta planilha. Selecione uma célula e escolha Novo Comentário.",
         _ => return None,
     })
 }

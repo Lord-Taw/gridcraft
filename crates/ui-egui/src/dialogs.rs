@@ -360,7 +360,7 @@ impl Dialog {
                     if threaded { "comment" } else { "note" },
                     if threaded { "New Comment" } else { "New Note" },
                     if threaded { "review.newComment" } else { "review.newNote" },
-                    vec![Text { key: "text", label: if threaded { "Start a conversation:" } else { "Note:" } }],
+                    vec![Text { key: "text", label: if threaded { lang.tr("Start a conversation:") } else { lang.tr("Note:") } }],
                     json!({"text": existing}),
                 )
             }
@@ -2324,58 +2324,58 @@ fn goal_seek(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confirm: &mu
 }
 
 /// The fields of one Analysis ToolPak tool's form (input and options; output is drawn apart).
-fn toolpak_fields(tool: &str) -> Vec<Field> {
+fn toolpak_fields(tool: &str, lang: crate::i18n::Language) -> Vec<Field> {
     use Field::*;
-    let grouped = || Choice { key: "groupedBy", label: "Grouped By:", options: vec![("columns", "Columns"), ("rows", "Rows")] };
-    let labels = || Check { key: "labels", label: "Labels in first row" };
-    let range = || Text { key: "range", label: "Input Range:" };
-    let two = || vec![Text { key: "range1", label: "Variable 1 Range:" }, Text { key: "range2", label: "Variable 2 Range:" }];
+    let grouped = || Choice { key: "groupedBy", label: lang.tr("Grouped By:"), options: vec![("columns", lang.tr("Columns")), ("rows", lang.tr("Rows"))] };
+    let labels = || Check { key: "labels", label: lang.tr("Labels in first row") };
+    let range = || Text { key: "range", label: lang.tr("Input Range:") };
+    let two = || vec![Text { key: "range1", label: lang.tr("Variable 1 Range:") }, Text { key: "range2", label: lang.tr("Variable 2 Range:") }];
     match tool {
         "descriptive" => vec![
             range(),
             grouped(),
             labels(),
-            Check { key: "summary", label: "Summary statistics" },
-            Text { key: "confidence", label: "Confidence Level for Mean (%), blank for none:" },
-            Text { key: "kthLargest", label: "Kth Largest (blank for none):" },
-            Text { key: "kthSmallest", label: "Kth Smallest (blank for none):" },
+            Check { key: "summary", label: lang.tr("Summary statistics") },
+            Text { key: "confidence", label: lang.tr("Confidence Level for Mean (%), blank for none:") },
+            Text { key: "kthLargest", label: lang.tr("Kth Largest (blank for none):") },
+            Text { key: "kthSmallest", label: lang.tr("Kth Smallest (blank for none):") },
         ],
         "histogram" => vec![
             range(),
-            Text { key: "bins", label: "Bin Range (blank for automatic bins):" },
+            Text { key: "bins", label: lang.tr("Bin Range (blank for automatic bins):") },
             labels(),
-            Check { key: "pareto", label: "Pareto (sorted histogram)" },
-            Check { key: "cumulative", label: "Cumulative Percentage" },
+            Check { key: "pareto", label: lang.tr("Pareto (sorted histogram)") },
+            Check { key: "cumulative", label: lang.tr("Cumulative Percentage") },
         ],
         "correlation" | "covariance" | "rankPercentile" => vec![range(), grouped(), labels()],
-        "anovaSingle" => vec![range(), grouped(), labels(), Text { key: "alpha", label: "Alpha:" }],
+        "anovaSingle" => vec![range(), grouped(), labels(), Text { key: "alpha", label: lang.tr("Alpha:") }],
         "regression" => vec![
-            Text { key: "inputY", label: "Input Y Range:" },
-            Text { key: "inputX", label: "Input X Range:" },
+            Text { key: "inputY", label: lang.tr("Input Y Range:") },
+            Text { key: "inputX", label: lang.tr("Input X Range:") },
             labels(),
-            Check { key: "constantZero", label: "Constant is Zero" },
-            Text { key: "confidence", label: "Confidence Level (%):" },
-            Check { key: "residuals", label: "Residuals" },
-            Check { key: "standardizedResiduals", label: "Standardized Residuals" },
-            Check { key: "normalProbability", label: "Normal Probability" },
+            Check { key: "constantZero", label: lang.tr("Constant is Zero") },
+            Text { key: "confidence", label: lang.tr("Confidence Level (%):") },
+            Check { key: "residuals", label: lang.tr("Residuals") },
+            Check { key: "standardizedResiduals", label: lang.tr("Standardized Residuals") },
+            Check { key: "normalProbability", label: lang.tr("Normal Probability") },
         ],
         "movingAverage" => {
-            vec![range(), labels(), Text { key: "interval", label: "Interval:" }, Check { key: "standardErrors", label: "Standard Errors" }]
+            vec![range(), labels(), Text { key: "interval", label: lang.tr("Interval:") }, Check { key: "standardErrors", label: lang.tr("Standard Errors") }]
         }
         "exponentialSmoothing" => {
-            vec![range(), labels(), Text { key: "damping", label: "Damping factor:" }, Check { key: "standardErrors", label: "Standard Errors" }]
+            vec![range(), labels(), Text { key: "damping", label: lang.tr("Damping factor:") }, Check { key: "standardErrors", label: lang.tr("Standard Errors") }]
         }
         "fTest" => {
             let mut v = two();
-            v.extend([labels(), Text { key: "alpha", label: "Alpha:" }]);
+            v.extend([labels(), Text { key: "alpha", label: lang.tr("Alpha:") }]);
             v
         }
         _ => {
             let mut v = two();
             v.extend([
-                Text { key: "hypothesizedDifference", label: "Hypothesized Mean Difference:" },
+                Text { key: "hypothesizedDifference", label: lang.tr("Hypothesized Mean Difference:") },
                 labels(),
-                Text { key: "alpha", label: "Alpha:" },
+                Text { key: "alpha", label: lang.tr("Alpha:") },
             ]);
             v
         }
@@ -2401,15 +2401,16 @@ fn toolpak_defaults(sel: &str, tool: &str) -> Map<String, Json> {
 /// (through the dialog's command); a report that would replace data asks first.
 fn analysis_toolpak(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool, open: &mut bool) {
     use gridcraft_engine::cmd::analysis::TOOLS;
+    let lang = app.ui.language;
     if d.values.get("askOverwrite").and_then(Json::as_bool) == Some(true) {
-        ui.label("The output range already holds data. Replace it with the report?");
+        ui.label(lang.tr("The output range already holds data. Replace it with the report?"));
         ui.horizontal(|ui| {
-            if ui.button("Replace").clicked() {
+            if ui.button(lang.tr("Replace")).clicked() {
                 d.values.remove("askOverwrite");
                 d.values.insert("overwrite".into(), json!(true));
                 *confirm = true;
             }
-            if ui.button("Cancel").clicked() {
+            if ui.button(lang.tr("Cancel")).clicked() {
                 d.values.remove("askOverwrite");
             }
         });
@@ -2417,12 +2418,12 @@ fn analysis_toolpak(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confi
     }
     let tool = d.values.get("tool").and_then(Json::as_str).unwrap_or("").to_string();
     let Some((_, label)) = TOOLS.iter().find(|(id, _)| *id == tool) else {
-        ui.label(egui::RichText::new("Analysis Tools").strong());
+        ui.label(egui::RichText::new(lang.tr("Analysis Tools")).strong());
         let pick = d.values.get("pick").and_then(Json::as_str).unwrap_or("").to_string();
         let mut chosen = false;
         egui::ScrollArea::vertical().max_height(260.0).show(ui, |ui| {
             for (id, label) in TOOLS {
-                let r = ui.selectable_label(pick == *id, *label);
+                let r = ui.selectable_label(pick == *id, lang.tr(label));
                 if r.clicked() {
                     d.values.insert("pick".into(), json!(id));
                 }
@@ -2441,12 +2442,12 @@ fn analysis_toolpak(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confi
         return;
     };
     d.title = label.to_string();
-    d.fields = toolpak_fields(&tool);
+    d.fields = toolpak_fields(&tool, lang);
     form_fields(ui, d);
     ui.separator();
-    ui.label(egui::RichText::new("Output options").strong());
+    ui.label(egui::RichText::new(lang.tr("Output options")).strong());
     let to = d.values.get("outputTo").and_then(Json::as_str).unwrap_or("newSheet").to_string();
-    for (key, choice, text_label) in [("output", "range", "Output Range:"), ("newSheet", "newSheet", "New Worksheet Ply:")] {
+    for (key, choice, text_label) in [("output", "range", lang.tr("Output Range:")), ("newSheet", "newSheet", lang.tr("New Worksheet Ply:"))] {
         ui.horizontal(|ui| {
             if ui.radio(to == choice, text_label).clicked() {
                 d.values.insert("outputTo".into(), json!(choice));
@@ -2464,6 +2465,7 @@ fn analysis_toolpak(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confi
 /// Data › Solver: the Solver Parameters form. Solve runs `data.solver` through the dialog's
 /// command; the result opens Solver Results.
 fn solver(ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool, open: &mut bool) {
+    let lang = crate::i18n::current(ui.ctx());
     let text = |d: &Dialog, k: &str| d.values.get(k).map(|v| v.as_str().map(str::to_string).unwrap_or_else(|| v.to_string())).unwrap_or_default();
     let edit = |ui: &mut egui::Ui, d: &mut Dialog, k: &str, width: f32| {
         let mut t = text(d, k);
@@ -2472,12 +2474,12 @@ fn solver(ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool, open: &mut bool
         }
     };
     ui.horizontal(|ui| {
-        ui.label("Set Objective:");
+        ui.label(lang.tr("Set Objective:"));
         edit(ui, d, "objective", 200.0);
     });
     let goal = text(d, "goal");
     ui.horizontal(|ui| {
-        ui.label("To:");
+        ui.label(lang.tr("To:"));
         for (g, label) in [("max", "Max"), ("min", "Min"), ("value", "Value Of:")] {
             if ui.radio(goal == g, label).clicked() {
                 d.values.insert("goal".into(), json!(g));
@@ -2485,9 +2487,9 @@ fn solver(ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool, open: &mut bool
         }
         edit(ui, d, "value", 80.0);
     });
-    ui.label("By Changing Variable Cells:");
+    ui.label(lang.tr("By Changing Variable Cells:"));
     edit(ui, d, "variables", 420.0);
-    ui.label("Subject to the Constraints:");
+    ui.label(lang.tr("Subject to the Constraints:"));
     let list: Vec<String> = d
         .values
         .get("constraints")

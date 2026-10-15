@@ -1640,12 +1640,13 @@ fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
     anchor_keytip(app, ui, &th, &["pageLayout.theme"]);
     egui::Popup::menu(&th).show(|ui| {
         for (name, colors) in gridcraft_engine::cmd::view::themes() {
+            let label = lang.tr(name);
             ui.horizontal(|ui| {
                 for c in colors.iter().skip(4).take(6) {
                     let (r, _) = ui.allocate_exact_size(vec2(12.0, 12.0), Sense::hover());
                     ui.painter().rect_filled(r, 1.0, Color32::from_rgb((c >> 16) as u8, (c >> 8) as u8, *c as u8));
                 }
-                if ui.button(name).clicked() {
+                if ui.button(label).clicked() {
                     act(app, "pageLayout.theme", json!({"name": name}));
                 }
             });
@@ -1684,7 +1685,7 @@ fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
     control_keytip(app, ui, &s, "pageLayout.size");
     egui::Popup::menu(&s).show(|ui| {
         for p in ["Letter", "Legal", "Tabloid", "Executive", "A3", "A4", "A5"] {
-            if ui.button(p).clicked() {
+            if ui.button(lang.tr(p)).clicked() {
                 act(app, "pageLayout.size", json!({"paper": p}));
             }
         }
