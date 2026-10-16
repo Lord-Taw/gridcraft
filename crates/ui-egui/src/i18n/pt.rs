@@ -3,6 +3,29 @@
 
 pub(super) fn translate(text: &str) -> Option<&'static str> {
     Some(match text {
+        "The objective must be a single cell." => "O objetivo deve ser uma única célula.",
+        "The objective cell must contain a formula." => "A célula objetivo deve conter uma fórmula.",
+        "The variable cells must be a reference like B2:B4." => "As células variáveis devem ser uma referência como B2:B4.",
+        "The variable cells must be on the objective cell's sheet." => "As células variáveis devem estar na mesma planilha da célula objetivo.",
+        "Variable cells must hold constants, not formulas." => "As células variáveis devem conter constantes, não fórmulas.",
+        "the constraint's right side must be a number" => "O lado direito da restrição deve ser um número.",
+        "missing the constraint's right side" => "Falta o lado direito da restrição.",
+        "Constraint cells must be on the objective cell's sheet." => "As células das restrições devem estar na mesma planilha da célula objetivo.",
+        "The constraint's two sides must be the same size (or the right side one cell)." => {
+            "Os dois lados da restrição devem ter o mesmo tamanho (ou o lado direito deve conter uma célula)."
+        }
+        "all cells of a reference must be on one sheet" => "Todas as células de uma referência devem estar na mesma planilha.",
+        "too many cells (at most 200)" => "Número excessivo de células (no máximo 200).",
+        "too many cells (at most 1000)" => "Número excessivo de células (no máximo 1000).",
+        "goal `value` needs a number in `value`" => "O objetivo `value` precisa de um número em `value`.",
+        "Too many variable cells (at most 200)." => "Número excessivo de células variáveis (no máximo 200).",
+        "Too many constraints (at most 1000)." => "Número excessivo de restrições (no máximo 1000).",
+        "Too many constraints (at most 1000 cells)." => "Número excessivo de restrições (no máximo 1000 células).",
+        "`constraints` must be an array" => "`constraints` deve ser uma lista.",
+        "Integer and binary constraints must be on variable cells." => "As restrições inteiras e binárias devem ser aplicadas às células variáveis.",
+        "a constraint is a string like \"B5 <= 10\" or {lhs, op, rhs}" => {
+            "Uma restrição é um texto como \"B5 <= 10\" ou um objeto {lhs, op, rhs}."
+        }
         "Paste" => "Colar",
         "Paste (⌘V)" => "Colar (Ctrl + V)",
         "Paste Values" => "Colar Valores",
@@ -1087,6 +1110,30 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Solve" => "Resolver",
         "Keep Solver Solution" => "Manter Solução do Solver",
         "Restore Original Values" => "Restaurar Valores Originais",
+        "Reports:" => "Relatórios:",
+        "Answer" => "Resposta",
+        "Limits" => "Limites",
+        "The model isn't linear in the variable cells, so Simplex LP can't solve it. Try GRG Nonlinear." => {
+            "O modelo não é linear nas células variáveis, portanto o Simplex LP não pode resolvê-lo. Tente GRG Não Linear."
+        }
+        "Solver stopped when the best solution stopped improving. All constraints are satisfied." => {
+            "O Solver parou quando a melhor solução deixou de melhorar. Todas as restrições foram atendidas."
+        }
+        "The population converged. The best solution found satisfies all constraints." => {
+            "A população convergiu. A melhor solução encontrada atende a todas as restrições."
+        }
+        "Solver found an optimal solution. All constraints are satisfied." => "O Solver encontrou uma solução ótima. Todas as restrições foram atendidas.",
+        "Solver converged to a locally optimal solution. All constraints are satisfied." => {
+            "O Solver convergiu para uma solução localmente ótima. Todas as restrições foram atendidas."
+        }
+        "Solver stopped at its evaluation limit; the best solution found satisfies the constraints." => {
+            "O Solver atingiu o limite de avaliações; a melhor solução encontrada atende às restrições."
+        }
+        "Solver stopped at its evaluation limit without finding a feasible solution." => {
+            "O Solver atingiu o limite de avaliações sem encontrar uma solução viável."
+        }
+        "Solver could not find a solution that satisfies all constraints." => "O Solver não encontrou uma solução que atenda a todas as restrições.",
+        "The objective can grow without limit: the problem is unbounded." => "O objetivo pode crescer sem limite: o problema é ilimitado.",
         "The spelling check is complete for the entire sheet." => "A verificação ortográfica da planilha inteira foi concluída.",
         "Not in Dictionary ({cell}):" => "Não consta no dicionário ({cell}):",
         "Suggestions:" => "Sugestões:",
@@ -1163,6 +1210,25 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Tabloid" => "Tablóide",
         "Executive" => "Executivo",
         "No comments on this sheet yet. Select a cell and choose New Comment." => "Ainda não há comentários nesta planilha. Selecione uma célula e escolha Novo Comentário.",
+        "Source:" => "Fonte:",
+        "The name that you entered is not valid. Valid names must begin with a letter or underscore, and may only contain letters, numbers, periods, and underscores." => {
+            "O nome que você digitou não é válido. Nomes válidos devem começar com uma letra ou sublinhado e podem conter apenas letras, números, pontos e sublinhados."
+        }
+        "We looked at all the data next to your selection and didn't see a pattern for filling in values for you." => {
+            "Analisamos todos os dados ao lado da sua seleção e não encontramos um padrão para preencher valores para você."
+        }
+        "Simplex LP: for linear models; integer and binary constraints by branch and bound." => {
+            "Simplex LP: para modelos lineares; restrições inteiras e binárias por ramificação e delimitação."
+        }
+        "Evolutionary: a genetic search for models that aren't smooth; every variable cell needs bounds." => {
+            "Evolutivo: uma busca genética por modelos que não são suaves; cada célula variável precisa de limites."
+        }
+        "GRG Nonlinear: a local optimum of a smooth model, from the current values." => {
+            "GRG Não Linear: um ótimo local de um modelo suave, a partir dos valores atuais."
+        }
+        " Close " => " Fechar ",
+        "  Solve  "=> "  Resolver  ",
+        "No dictionary is available on this system (GridCraft uses the system word list)." => "Nenhum dicionário está disponível neste sistema (GridCraft usa a lista de palavras do sistema).",
         _ => return None,
     })
 }
