@@ -682,7 +682,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Indent" => "Rientro",
         "Orientation (degrees)" => "Orientamento (gradi)",
         "Wrap text" => "Testo a capo",
-        "Shrink to fit" => "Adatta a pagina",
+        "Shrink to fit" => "Riduci e adatta",
         "Bold" => "Grassetto",
         "Italic" => "Corsivo",
         "None" => "Nessuno",
@@ -732,7 +732,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "{count} cell(s) found" => "{count} celle trovate",
         "Reference:" => "Riferimento:",
         "Special…" => "Speciale…",
-        "My list has headers" => "L'elenco ha intestazioni",
+        "My list has headers" => "L'elenco ha intestazioni",1
         "Sort by" => "Ordina per",
         "Then by" => "Quindi per",
         "Cell Values" => "Valori cella",
