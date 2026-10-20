@@ -732,7 +732,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "{count} cell(s) found" => "{count} celle trovate",
         "Reference:" => "Riferimento:",
         "Special…" => "Speciale…",
-        "My list has headers" => "L'elenco ha intestazioni",1
+        "My list has headers" => "L'elenco ha intestazioni",
         "Sort by" => "Ordina per",
         "Then by" => "Quindi per",
         "Cell Values" => "Valori cella",
