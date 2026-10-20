@@ -179,7 +179,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Group" => "Gruppo",
         "Ungroup" => "Separa",
         "Show Detail" => "Mostra dettaglio",
-        "Hide Detail" => "Nascosta dettaglio",
+        "Hide Detail" => "Nascondi dettaglio",
         "Subtotal" => "Subtotale",
         "Data\nAnalysis" => "Analisi dati",
         "Data Analysis" => "Analisi dati",
