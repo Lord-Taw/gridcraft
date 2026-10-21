@@ -181,7 +181,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Show Detail" => "Mostra dettaglio",
         "Hide Detail" => "Nascondi dettaglio",
         "Subtotal" => "Subtotale",
-        "Data\nAnalysis" => "Analisi dati",
+        "Data\nAnalysis" => "Analisi\ndati",
         "Data Analysis" => "Analisi dati",
         "Solver" => "Risolutore",
         "What-If\nAnalysis" => "Analisi di\nsensibilità",
