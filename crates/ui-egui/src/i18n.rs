@@ -669,10 +669,7 @@ mod tests {
         assert_eq!(Language::It.tr("Freeze Panes"), "Blocca riquadri");
         assert_eq!(Language::It.tr("Sheet1!A1"), "Sheet1!A1");
         assert_eq!(Language::It.tr("Page Layout|Orientation"), "Orientamento");
-        assert_eq!(
-            Language::It.tr_error("Select a chart first."),
-            "Seleziona prima un grafico."
-        );
+        assert_eq!(Language::It.tr_error("Select a chart first."), "Seleziona prima un grafico.");
     }
 
     #[test]

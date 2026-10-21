@@ -631,7 +631,14 @@ impl SheetApp {
                         self.ui.language = l;
                         Ok(json!({"language": l}))
                     }
-                    None => Err(format!("unknown language {code:?} (use \"en\", \"es\", \"zh\", \"ja\", \"ko\", \"ru\", \"pt\" or \"cs\")")),
+                    //None => Err(format!("unknown language {code:?} (use \"en\", \"es\", \"zh\", \"ja\", \"ko\", \"ru\", \"pt\" or \"cs\")")),
+                    None => {
+                        // Build the list of valid language codes from Language::ALL so the
+                        // error message stays in sync when new languages are added.
+                        let supported = i18n::Language::ALL.iter().map(|l| l.code()).collect::<Vec<_>>().join(", ");
+
+                        Err(format!("unknown language {code:?} (use one of: {supported})"))
+                    }
                 }
             }
             "app.language.english" => {
