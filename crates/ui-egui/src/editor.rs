@@ -107,6 +107,16 @@ impl EditState {
         self.sync_caret = true;
     }
 
+    /// Replaces a specific reference occurrence in the formula by its reference index.
+    pub fn replace_ref_at_index(&mut self, ref_idx: usize, new_ref_text: &str) {
+        let refs = formula_refs(&self.text);
+        if let Some((start, end, _, _, _)) = refs.iter().find(|(_, _, _, _, idx)| *idx == ref_idx) {
+            let (Some(a), Some(b)) = (self.text.get(..*start), self.text.get(*end..)) else { return };
+            self.text = format!("{a}{new_ref_text}{b}");
+            self.sync_caret = true;
+        }
+    }
+
     /// Updates function autocomplete for the word before the caret.
     pub fn update_autocomplete(&mut self, names: &[String]) {
         self.autocomplete.clear();
