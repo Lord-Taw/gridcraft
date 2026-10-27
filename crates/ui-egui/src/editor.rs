@@ -135,6 +135,8 @@ impl EditState {
             self.caret_to_end = false;
             self.sync_caret = true;
         }
+    }
+    
     /// Inserts `t` at the caret as typed text (Paste Names), in place of the selected text: the
     /// caret ends after it, and point mode starts afresh.
     pub fn insert_at_caret(&mut self, t: &str) {
