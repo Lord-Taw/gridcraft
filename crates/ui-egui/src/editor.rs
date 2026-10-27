@@ -112,13 +112,21 @@ impl EditState {
         self.sync_caret = true;
     }
 
-    /// Replaces a specific reference occurrence in the formula by its reference index.
-    pub fn replace_ref_at_index(&mut self, ref_idx: usize, new_ref_text: &str) {
+    /// Replaces a specific reference occurrence in the formula by its original byte span.
+    pub fn replace_ref_at_byte_span(&mut self, byte_span: (usize, usize), new_ref_text: &str) {
         let refs = formula_refs(&self.text);
-        if let Some((start, end, _, _, _)) = refs.iter().find(|(_, _, _, _, idx)| *idx == ref_idx) {
+        if let Some((start, end, _, _, _)) = refs.iter().find(|(s, e, _, _, _)| (*s, *e) == byte_span) {
             let (Some(a), Some(b)) = (self.text.get(..*start), self.text.get(*end..)) else { return };
             self.text = format!("{a}{new_ref_text}{b}");
+
+            let new_end = start + new_ref_text.len();
+            self.point = Some((*start, new_end));
+            self.caret = self.text.get(..new_end).map(|s| s.chars().count()).unwrap_or(0);
+            self.caret_to_end = false;
             self.sync_caret = true;
+        }
+    }
+
     /// Add another argument after the current pointed reference. Keep only the new reference
     /// replaceable, so a subsequent plain click does not remove earlier arguments or the separator.
     pub fn append_ref(&mut self, r: &str) {

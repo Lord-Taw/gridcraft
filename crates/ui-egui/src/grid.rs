@@ -95,7 +95,7 @@ pub enum Drag {
     },
     /// Dragging a formula reference outline to re-point or resize its cell or range.
     RefOutline {
-        ref_idx: usize,
+        byte_span: (usize, usize),
         grab_cell: CellRef,
         orig_range: RangeRef,
         resize_corner: Option<u8>, // 0: TopLeft, 1: TopRight, 2: BottomLeft, 3: BottomRight
@@ -1521,8 +1521,9 @@ pub fn table_headings(geo: &Geo, sh: &Sheet, active: CellRef) -> Vec<TableHeadin
         }
         let rect = Rect::from_min_size(pos2(geo.x(sh, col), geo.head_top()), vec2(w, geo.header_h));
         // Clear of the 4-point column resize edge, and never wider than the column.
-        let s = (rect.height() - 6.0).clamp(10.0, 16.0).min(w - 7.0);
-        let button = (tb.filter_button && s > 0.0).then(|| Rect::from_min_size(pos2(rect.right() - s - 5.0, rect.center().y - s / 2.0), vec2(s, s)));
+        let s = ((rect.height() - 6.0) * geo.z).clamp(8.0, 16.0).min(w - 7.0);
+        let button = (tb.filter_button && s > 0.0 && w >= s + 12.0 * geo.z)
+            .then(|| Rect::from_min_size(pos2(rect.right() - s - 5.0 * geo.z, rect.center().y - s / 2.0), vec2(s, s)));
         let filtered = tb.filter.iter().any(|(o, _)| *o == off) || af.is_some_and(|af| af.criteria.iter().any(|(o, _)| *o == off));
         out.push(TableHeading { col, header_row: tb.range.start.row, name: column.name.clone(), rect, button, filtered });
     }
@@ -1727,6 +1728,51 @@ pub(crate) fn outline_bands(rect: Rect, width: f32, clip: Rect) -> Vec<Rect> {
     sides.into_iter().map(|s| s.intersect(clip)).filter(|s| s.is_finite() && s.width() > 0.0 && s.height() > 0.0).collect()
 }
 
+/// Reconstrói o texto do `new_range` preservando o qualificador da planilha e os cifrões ($) de ancoragem originais.
+fn format_range_preserving_syntax(orig_token: &str, new_range: RangeRef) -> String {
+    // Preserva o prefixo da planilha, se existir (ex.: "Sheet2!" ou "'Minha Planilha'!")
+    let (sheet_prefix, body) = match orig_token.rfind('!') {
+        Some(idx) => (&orig_token[..=idx], &orig_token[idx + 1..]),
+        None => ("", orig_token),
+    };
+
+    // Divide em início e fim se for um intervalo (ex.: "$A$1:$B2")
+    let parts: Vec<&str> = body.split(':').collect();
+    let start_str = parts.first().copied().unwrap_or("");
+    let end_str = parts.get(1).copied();
+
+    let parse_anchors = |s: &str| {
+        let col_abs = s.starts_with('$');
+        let rest = if col_abs { &s[1..] } else { s };
+        let row_abs = rest.contains('$');
+        (col_abs, row_abs)
+    };
+
+    let (start_col_abs, start_row_abs) = parse_anchors(start_str);
+
+    let format_cell = |cell: CellRef, col_abs: bool, row_abs: bool| {
+        let col_str = col_to_letters(cell.col);
+        let col_prefix = if col_abs { "$" } else { "" };
+        let row_prefix = if row_abs { "$" } else { "" };
+        format!("{col_prefix}{col_str}{row_prefix}{}", cell.row + 1)
+    };
+
+    let new_start_formatted = format_cell(new_range.start, start_col_abs, start_row_abs);
+
+    let formatted_body = if new_range.is_single() && end_str.is_none() {
+        new_start_formatted
+    } else {
+        let (end_col_abs, end_row_abs) = match end_str {
+            Some(s) => parse_anchors(s),
+            None => (start_col_abs, start_row_abs),
+        };
+        let new_end_formatted = format_cell(new_range.end, end_col_abs, end_row_abs);
+        format!("{new_start_formatted}:{new_end_formatted}")
+    };
+
+    format!("{sheet_prefix}{formatted_body}")
+}
+
 /// `outline` is where the current area's border is drawn this frame (see `selection_glide`).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn paint_selection(
@@ -1752,13 +1798,23 @@ pub(crate) fn paint_selection(
     if let Some(ed) = &app.editor
         && ed.is_formula()
     {
-        let origin = app.session.active().and_then(|d| d.wb.sheet(ed.sheet)).map_or(sh.name.as_str(), |o| o.name.as_str());
-        for (_, _, r, sheet, idx) in crate::editor::formula_refs(&ed.text) {
-            if !crate::editor::ref_is_on_sheet(sheet.as_deref(), origin, &sh.name) {
+        let editor_sheet_name = app.session.active().and_then(|d| d.wb.sheet(ed.sheet)).map_or("", |o| o.name.as_str());
+
+        for (start, end, r, sheet, idx) in crate::editor::formula_refs(&ed.text) {
+            // Check sheet matching based on whether the reference is qualified or unqualified:
+            // - Qualified references (e.g., Sheet2!A1): preserve case-insensitive sheet-name check against the displayed sheet.
+            // - Unqualified references (e.g., A1): require ed.sheet to match the displayed sheet.
+            let matches_sheet = match &sheet {
+                Some(ref_sheet) => ref_sheet.eq_ignore_ascii_case(&sh.name),
+                None => editor_sheet_name.eq_ignore_ascii_case(&sh.name),
+            };
+
+            if !matches_sheet {
                 continue;
             }
-            let draw_r = if let Drag::RefOutline { ref_idx, grab_cell, orig_range, resize_corner } = &app.grid.drag {
-                if *ref_idx == idx {
+
+            let draw_r = if let Drag::RefOutline { byte_span: outline_span, grab_cell, orig_range, resize_corner } = &app.grid.drag {
+                if *outline_span == (start, end) {
                     if let Some(corner) = resize_corner {
                         let hover_cell = app.grid.hover_cell.unwrap_or(orig_range.end);
                         match corner {
@@ -1774,7 +1830,10 @@ pub(crate) fn paint_selection(
                                 CellRef::new(orig_range.start.row, hover_cell.col.min(orig_range.end.col)),
                                 CellRef::new(hover_cell.row.max(orig_range.start.row), orig_range.end.col),
                             ),
-                            _ => RangeRef::new(orig_range.start, hover_cell),
+                            _ => RangeRef::new(
+                                orig_range.start,
+                                CellRef::new(hover_cell.row.max(orig_range.start.row), hover_cell.col.max(orig_range.start.col)),
+                            ),
                         }
                     } else if let Some(hover) = app.grid.hover_cell {
                         let dr = hover.row as i64 - grab_cell.row as i64;
@@ -1855,7 +1914,6 @@ pub(crate) fn paint_selection(
         }
     }
 }
-
 pub(crate) fn paint_headers(
     p: &Painter,
     geo: &Geo,
@@ -1976,12 +2034,12 @@ fn hidden_around(i: u32, size: impl Fn(u32) -> f32) -> (bool, bool) {
 /// How close (in points) a press must be to an object's bottom-right corner to resize it instead of moving it.
 const OBJECT_RESIZE_RADIUS: f32 = 10.0;
 
-fn hit_ref_outline(app: &SheetApp, geo: &Geo, sh: &Sheet, p: Pos2) -> Option<(usize, RangeRef, Option<u8>)> {
+fn hit_ref_outline(app: &SheetApp, geo: &Geo, sh: &Sheet, p: Pos2) -> Option<((usize, usize), RangeRef, Option<u8>)> {
     let ed = app.editor.as_ref()?;
     if !ed.is_formula() {
         return None;
     }
-    for (_, _, r, sheet, idx) in crate::editor::formula_refs(&ed.text) {
+    for (start, end, r, sheet, _idx) in crate::editor::formula_refs(&ed.text) {
         if sheet.as_deref().is_some_and(|s| !s.eq_ignore_ascii_case(&sh.name)) {
             continue;
         }
@@ -1989,14 +2047,15 @@ fn hit_ref_outline(app: &SheetApp, geo: &Geo, sh: &Sheet, p: Pos2) -> Option<(us
         let corners = [rr.left_top(), rr.right_top(), rr.left_bottom(), rr.right_bottom()];
         for (c_idx, c_pos) in corners.iter().enumerate() {
             if (*c_pos - p).length() <= 6.0 {
-                return Some((idx, r, Some(c_idx as u8)));
+                return Some(((start, end), r, Some(c_idx as u8)));
             }
         }
         if on_border(rr, p) {
-            return Some((idx, r, None));
+            return Some(((start, end), r, None));
         }
     }
     None
+}
 /// Decide after interaction so drag start and release use the new state in the same frame.
 fn update_cursor(app: &mut SheetApp, ui: &egui::Ui, resp: &egui::Response, geo: &Geo, sh: &Sheet) {
     if app.text_box_editor.is_some() || app.grid.hf_edit.is_some() {
@@ -2034,7 +2093,9 @@ fn update_cursor(app: &mut SheetApp, ui: &egui::Ui, resp: &egui::Response, geo: 
             Drag::ResizeRow { .. } => Some(CursorIcon::ResizeRow),
             Drag::Freeze { cols, .. } => Some(if cols { CursorIcon::ResizeHorizontal } else { CursorIcon::ResizeVertical }),
             Drag::Object { resize: true, .. } => Some(CursorIcon::ResizeNwSe),
+            Drag::RefOutline { resize_corner, .. } => Some(if resize_corner.is_some() { CursorIcon::Crosshair } else { CursorIcon::Move }),
         };
+
         if let Some(cursor) = cursor {
             ctx.set_cursor_icon(cursor);
             return;
@@ -2143,18 +2204,22 @@ fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Response, geo: &
         let near_object_corner = app.grid.drag == Drag::None && near_corner;
         let ref_hit = if in_cells { hit_ref_outline(app, geo, sh, p) } else { None };
 
+        // Verifica se o ponteiro está em cima de uma quina (resize_corner) ou borda
+        let near_ref_corner = ref_hit.as_ref().is_some_and(|(_, _, corner)| corner.is_some());
+        let near_ref_border = ref_hit.is_some();
+
         if near_object_corner || matches!(app.grid.drag, Drag::Object { resize: true, .. }) {
             ctx.set_cursor_icon(CursorIcon::ResizeNwSe);
         } else if near_col_edge {
             ctx.set_cursor_icon(CursorIcon::ResizeColumn);
         } else if near_row_edge {
             ctx.set_cursor_icon(CursorIcon::ResizeRow);
-        } else if let Some((_, _, resize_corner)) = ref_hit {
-            if resize_corner.is_some() {
-                ctx.set_cursor_icon(CursorIcon::Crosshair);
-            } else {
-                ctx.set_cursor_icon(CursorIcon::Move);
-            }
+        } else if near_ref_corner {
+            // Apenas na quina vira a cruz (Crosshair)
+            ctx.set_cursor_icon(CursorIcon::Crosshair);
+        } else if near_ref_border {
+            // Na borda (mas fora da quina), mantém o ícone de mover (Move)
+            ctx.set_cursor_icon(CursorIcon::Move);
         } else if on_handle(p) && app.editor.is_none() {
             ctx.set_cursor_icon(CursorIcon::Crosshair);
             if app.grid.drag == Drag::None && !pointer.any_down() {
@@ -2415,10 +2480,10 @@ fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Response, geo: &
             app.grid.filter_menu = Some((c.col, c.row, geo.mirror_pos(p)));
             return;
         }
-        if let Some((ref_idx, orig_range, resize_corner)) = hit_ref_outline(app, geo, sh, p)
+        if let Some((byte_span, orig_range, resize_corner)) = hit_ref_outline(app, geo, sh, p)
             && resp.drag_started()
         {
-            app.grid.drag = Drag::RefOutline { ref_idx, grab_cell: c, orig_range, resize_corner };
+            app.grid.drag = Drag::RefOutline { byte_span, grab_cell: c, orig_range, resize_corner };
             return;
         } // Point mode while editing a formula: clicking inserts a reference.
         if let Some(ed) = app.editor.as_mut()
@@ -2605,8 +2670,37 @@ fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Response, geo: &
                 app.grid.drag = Drag::Move { grab, to: Some(src.start.offset_clamped(dr, dc)) };
                 scroll_by(app, auto);
             }
-            Drag::RefOutline { .. } => {
-                scroll_by(app, auto);
+            Drag::RefOutline { byte_span, grab_cell, orig_range, resize_corner } => {
+                if let Some(hover) = app.grid.hover_cell {
+                    let new_range = if let Some(corner) = resize_corner {
+                        match corner {
+                            0 => RangeRef::new(CellRef::new(hover.row.min(orig_range.end.row), hover.col.min(orig_range.end.col)), orig_range.end),
+                            1 => RangeRef::new(
+                                CellRef::new(hover.row.min(orig_range.end.row), orig_range.start.col),
+                                CellRef::new(orig_range.end.row, hover.col.max(orig_range.start.col)),
+                            ),
+                            2 => RangeRef::new(
+                                CellRef::new(orig_range.start.row, hover.col.min(orig_range.end.col)),
+                                CellRef::new(hover.row.max(orig_range.start.row), orig_range.end.col),
+                            ),
+                            _ => RangeRef::new(
+                                orig_range.start,
+                                CellRef::new(hover.row.max(orig_range.start.row), hover.col.max(orig_range.start.col)),
+                            ),
+                        }
+                    } else {
+                        let dr = hover.row as i64 - grab_cell.row as i64;
+                        let dc = hover.col as i64 - grab_cell.col as i64;
+                        RangeRef::new(orig_range.start.offset_clamped(dr, dc), orig_range.end.offset_clamped(dr, dc))
+                    };
+
+                    if let Some(ed) = app.editor.as_mut()
+                        && let Some(orig_token) = ed.text.get(byte_span.0..byte_span.1)
+                    {
+                        let ref_str = format_range_preserving_syntax(orig_token, new_range);
+                        ed.replace_ref_at_byte_span(byte_span, &ref_str);
+                    }
+                }
             }
             Drag::Object { kind, id, start, orig, resize } => {
                 let d = (p - start) / geo.z;
@@ -2651,7 +2745,7 @@ fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Response, geo: &
                 }
             }
 
-            Drag::RefOutline { ref_idx, grab_cell, orig_range, resize_corner } => {
+            Drag::RefOutline { byte_span, grab_cell, orig_range, resize_corner } => {
                 if let Some(hover) = app.grid.hover_cell {
                     let new_range = if let Some(corner) = resize_corner {
                         match corner {
@@ -2664,17 +2758,22 @@ fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Response, geo: &
                                 CellRef::new(orig_range.start.row, hover.col.min(orig_range.end.col)),
                                 CellRef::new(hover.row.max(orig_range.start.row), orig_range.end.col),
                             ),
-                            _ => RangeRef::new(orig_range.start, hover),
+                            _ => RangeRef::new(
+                                orig_range.start,
+                                CellRef::new(hover.row.max(orig_range.start.row), hover.col.max(orig_range.start.col)),
+                            ),
                         }
                     } else {
                         let dr = hover.row as i64 - grab_cell.row as i64;
                         let dc = hover.col as i64 - grab_cell.col as i64;
                         RangeRef::new(orig_range.start.offset_clamped(dr, dc), orig_range.end.offset_clamped(dr, dc))
                     };
-                    if let Some(ed) = app.editor.as_mut() {
-                        let ref_str = if new_range.is_single() { new_range.start.a1() } else { new_range.a1() };
-                        ed.replace_ref_at_index(ref_idx, &ref_str);
-                        ed.request_focus = true;
+
+                    if let Some(ed) = app.editor.as_mut()
+                        && let Some(orig_token) = ed.text.get(byte_span.0..byte_span.1)
+                    {
+                        let ref_str = format_range_preserving_syntax(orig_token, new_range);
+                        ed.replace_ref_at_byte_span(byte_span, &ref_str);
                     }
                 }
             }
