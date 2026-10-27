@@ -12,8 +12,39 @@ use gridcraft_engine::model::{BorderLine, BorderStyle, Color, HAlign, LineIndex,
 use serde_json::json;
 
 use crate::SheetApp;
-use crate::editor::{EditState, REF_COLORS};
+use crate::editor::EditState;
 use crate::theme::{self, Tokens};
+
+mod cell_paint;
+mod cursor;
+mod editor;
+mod geo;
+mod interact;
+mod keyboard;
+mod menus;
+mod quadrant;
+mod selection;
+mod show;
+mod tables;
+
+pub(crate) use cell_paint::paint_border;
+#[cfg(test)]
+pub(crate) use cell_paint::{cell_text_y, rotated_text_pos, wrapped_cell_text_y};
+#[cfg(test)]
+use cell_paint::{center_across_end, display_text, look, numfmt_color, painted_halign};
+pub use editor::validation_arrow;
+#[cfg(test)]
+use editor::{editor_slack, editor_width, list_picker_height};
+pub use geo::Geo;
+pub use interact::{follow_link, freeze_handles, point_move};
+pub(crate) use quadrant::paint_quadrant;
+pub(crate) use selection::paint_selection;
+pub use selection::selection_fill;
+pub(crate) use show::horizontal_scrollbar;
+pub use show::show;
+#[cfg(test)]
+use tables::filter_table_range;
+pub use tables::{TableHeading, filter_button_rect, heading_table, table_headings};
 
 pub const COL_HEADER_H: f32 = 21.0;
 /// Sheet units are 96-dpi pixels (as in XLSX); on screen one unit is drawn at this many points,
@@ -109,6 +140,39 @@ pub enum Drag {
     },
 }
 
+/// The fill a left-drag of the handle just made, which the Auto Fill Options button can redo
+/// another way. It only applies while nothing else changed the workbook (`revision`) and the
+/// filled cells are still selected.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FillTag {
+    pub src: RangeRef,
+    pub target: RangeRef,
+    pub uid: u64,
+    pub sheet: usize,
+    pub revision: u64,
+    pub undo_len: usize,
+}
+
+/// Trace Precedents / Trace Dependents arrows: they stay on the cell they were traced from, on its
+/// sheet, while the selection moves. They go away when anything changes the workbook
+/// (`revision`): Excel removes them on edits to the traced formula and on inserted, deleted or
+/// moved cells, this also on a new value in a precedent.
+pub struct Trace {
+    pub uid: u64,
+    pub revision: u64,
+    pub sheet: usize,
+    pub cell: CellRef,
+    /// The command's result: `{"sheet", "range"}` precedents or `{"sheet", "cell"}` dependents.
+    pub items: serde_json::Value,
+}
+
+impl Trace {
+    /// A trace of the active cell, just run.
+    pub fn new(app: &SheetApp, items: serde_json::Value) -> Option<Trace> {
+        app.session.active().map(|d| Trace { uid: d.uid, revision: d.revision, sheet: d.wb.active_sheet(), cell: d.selection.active, items })
+    }
+}
+
 #[derive(Default)]
 pub struct GridState {
     pub drag: Drag,
@@ -116,6 +180,10 @@ pub struct GridState {
     /// With `ensure_visible`: scroll to the moving end of the selection instead of the active cell
     /// (Shift/Ctrl+Shift+arrows keep the active cell on the anchor while the far corner moves).
     pub reveal_moving_end: bool,
+    /// With `ensure_visible`: the cell an arrow or paging key moved from (the moving end when
+    /// extending), set only by those keys. A move from the scrolled rows or columns into the
+    /// frozen ones scrolls them back to their top or left.
+    pub reveal_from: Option<CellRef>,
     pub last_title: Option<String>,
     pub drag_select: bool,
     pub rect: Option<Rect>,
@@ -127,6 +195,8 @@ pub struct GridState {
     pub context_menu_frame: u64,
     /// After a right-drag of the fill handle: the source, the dragged range and where to open the menu.
     pub fill_menu: Option<(RangeRef, RangeRef, Pos2)>,
+    /// After a left-drag of the fill handle: the Auto Fill Options button beside the filled cells.
+    pub fill_tag: Option<FillTag>,
     /// The right-clicked chart, picture, shape or slicer: where to open its menu, its kind and id.
     pub object_menu: Option<(Pos2, &'static str, u32)>,
     pub marching_phase: f32,
@@ -138,7 +208,7 @@ pub struct GridState {
     pub last_border: String,
     pub last_fill: String,
     pub last_font_color: String,
-    pub trace: Option<serde_json::Value>,
+    pub trace: Option<Trace>,
     pub renaming_tab: Option<usize>,
     pub rename_text: String,
     pub list_picker: Option<CellRef>,
@@ -151,6 +221,11 @@ pub struct GridState {
     /// The PivotTable Fields pane's `pivot.fields` answer, cached per (doc uid, revision, pivot):
     /// it scans the whole source list, far too slow to repeat every frame (#2113).
     pub pivot_fields: Option<((u64, u64, String), serde_json::Value)>,
+    /// The cells of a PivotTable report where the cell menu offers Show Details, relative to the
+    /// report's top-left and cached per (doc uid, revision, sheet, pivot): finding them computes
+    /// the whole report. `None` when the report can't be computed or is out of date: every cell
+    /// of it offers Show Details, and running it says why.
+    pub show_details_cells: Option<((u64, u64, usize, usize), Option<std::collections::HashSet<(u32, u32)>>)>,
     pub header_menu: Option<(Pos2, bool)>,
     /// Page Layout view pagination, cached per (doc uid, revision, sheet, rows, columns).
     pub paper: Option<crate::paper_view::PaperCache>,
@@ -164,6 +239,11 @@ pub struct GridState {
     pub geo: Option<Geo>,
     /// The horizontal scrollbar's track in the sheet tab bar (hit-testing for tests).
     pub hscroll: Option<Rect>,
+    /// The handle between the sheet tabs and the horizontal scrollbar (hit-testing for tests).
+    pub tab_split: Option<Rect>,
+    /// The share of the tab bar each workbook's tabs (and New sheet) take after the handle was
+    /// dragged, by document uid. A workbook without one gives its tabs up to 60%.
+    pub tab_shares: std::collections::HashMap<u64, f32>,
     /// Ctrl+wheel zoom in progress (see [`WheelZoom`]).
     pub wheel_zoom: Option<WheelZoom>,
     /// A one-finger touch drag in progress: it pans the sheet instead of selecting.
@@ -4051,6 +4131,10 @@ fn paint_pages(app: &mut SheetApp, p: &Painter, geo: &Geo, sh: &Sheet) {
         );
     }
     p.rect_stroke(pr, 0.0, Stroke::new(3.0, blue), StrokeKind::Outside);
+/// Row and column heading labels grow with the zoom as the cells do, as in Excel (at 400% the
+/// labels are four times their 100% size), and never get smaller than a readable 8.5 points.
+pub(crate) fn heading_font_size(zoom: f32) -> f32 {
+    (11.5 * (zoom / DISPLAY_SCALE)).max(8.5)
 }
 pub struct GridView<'a> {
     pub app: &'a mut SheetApp,
@@ -4094,504 +4178,4 @@ impl<'a> GridView<'a> {
 }
 
 #[cfg(test)]
-mod selection_fill_tests {
-    use super::*;
-
-    #[test]
-    fn rect_around_leaves_the_hole_and_never_overlaps() {
-        let area = Rect::from_min_max(pos2(100.0, 50.0), pos2(400.0, 250.0));
-        let check = |hole: Rect, pieces: usize| {
-            let parts: Vec<Rect> = rect_around(area, hole).collect();
-            assert_eq!(parts.len(), pieces, "{hole:?}: {parts:?}");
-            let cut = area.intersect(hole);
-            let cut_area = if cut.is_positive() { cut.area() } else { 0.0 };
-            let shaded: f32 = parts.iter().map(Rect::area).sum();
-            assert!((shaded - (area.area() - cut_area)).abs() < 0.5, "everything but the hole is shaded: {hole:?}");
-            for (i, a) in parts.iter().enumerate() {
-                assert!(area.contains_rect(*a), "nothing outside the area: {a:?}");
-                assert!(!a.shrink(0.01).intersects(hole), "the hole stays clear: {a:?} vs {hole:?}");
-                // The fill is translucent: a part shaded twice would show darker.
-                assert!(parts.iter().skip(i + 1).all(|b| !a.shrink(0.01).intersects(*b)), "{parts:?}");
-            }
-        };
-        let cell = |x: f32, y: f32| Rect::from_min_size(pos2(x, y), vec2(64.0, 16.0));
-        // In the middle, in each corner (where a drag began), along an edge.
-        check(cell(200.0, 100.0), 4);
-        check(cell(100.0, 50.0), 2);
-        check(cell(336.0, 50.0), 2);
-        check(cell(100.0, 234.0), 2);
-        check(cell(336.0, 234.0), 2);
-        check(cell(100.0, 100.0), 3);
-        // A merged cell as wide, or as tall, as the area; one that is all of it, or more.
-        check(Rect::from_min_max(pos2(100.0, 100.0), pos2(400.0, 132.0)), 2);
-        check(Rect::from_min_max(pos2(200.0, 50.0), pos2(264.0, 250.0)), 2);
-        check(area, 0);
-        check(area.expand(30.0), 0);
-        // The active cell is in another area, touches this one, or is only partly inside it.
-        check(cell(500.0, 300.0), 1);
-        check(cell(400.0, 50.0), 1);
-        check(cell(380.0, 240.0), 2);
-    }
-
-    #[test]
-    fn rect_around_survives_hostile_numbers() {
-        let sane = Rect::from_min_max(pos2(0.0, 0.0), pos2(64.0, 16.0));
-        let bad = [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, f32::MAX, f32::MIN, -1.0, 0.0];
-        for a in bad {
-            for b in bad {
-                let weird = Rect::from_min_max(pos2(a, b), pos2(b, a));
-                for (area, hole) in [(sane, weird), (weird, sane), (weird, weird)] {
-                    for part in rect_around(area, hole) {
-                        assert!(part.is_positive() && part.is_finite(), "{area:?} around {hole:?}: {part:?}");
-                    }
-                }
-                // A hole that makes no sense leaves the whole area shaded.
-                if !weird.intersects(sane) {
-                    assert_eq!(rect_around(sane, weird).collect::<Vec<_>>(), vec![sane]);
-                }
-            }
-        }
-    }
-}
-
-/// The horizontal alignment to paint with. Cells are painted left to right and a right-to-left
-/// sheet is mirrored afterwards, so an explicit Left or Right is swapped first to end up on the
-/// side the user chose: Align Right stays on the right in either sheet direction, as in Excel.
-/// General alignment is resolved from the value before this and follows the sheet direction.
-fn painted_halign(h: HAlign, rtl: bool) -> HAlign {
-    match h {
-        HAlign::Left if rtl => HAlign::Right,
-        HAlign::Right if rtl => HAlign::Left,
-        h => h,
-    }
-}
-
-/// Row and column heading labels grow with the zoom as the cells do, as in Excel (at 400% the
-/// labels are four times their 100% size), and never get smaller than a readable 8.5 points.
-pub(crate) fn heading_font_size(zoom: f32) -> f32 {
-    (11.5 * (zoom / DISPLAY_SCALE)).max(8.5)
-}
-
-#[cfg(test)]
-mod tests {
-
-    #[test]
-    fn explicit_left_and_right_keep_their_side_on_a_right_to_left_sheet() {
-        use super::{HAlign, painted_halign};
-        // Painted before the mirror: swapped, so they land where the user put them.
-        assert_eq!(painted_halign(HAlign::Right, true), HAlign::Left);
-        assert_eq!(painted_halign(HAlign::Left, true), HAlign::Right);
-        // Left-to-right sheets and the other alignments are painted as they are.
-        assert_eq!(painted_halign(HAlign::Right, false), HAlign::Right);
-        assert_eq!(painted_halign(HAlign::Left, false), HAlign::Left);
-        for h in [HAlign::Center, HAlign::Justify, HAlign::Fill] {
-            assert_eq!(painted_halign(h, true), h);
-        }
-    }
-
-    #[test]
-    fn heading_labels_scale_with_the_zoom_without_a_cap() {
-        use super::{DISPLAY_SCALE, heading_font_size};
-        let at = |percent: f32| heading_font_size(percent / 100.0 * DISPLAY_SCALE);
-        assert!((at(400.0) / at(100.0) - 4.0).abs() < 1e-4, "four times as large at 400%");
-        assert!(at(200.0) > at(100.0) && at(400.0) > at(200.0));
-        assert_eq!(at(10.0), 8.5, "never below a readable size");
-    }
-    use super::*;
-
-    #[test]
-    fn list_picker_fits_up_to_eight_rows_then_scrolls() {
-        assert_eq!(list_picker_height(5, 18.0, 3.0), 5.0 * 18.0 + 4.0 * 3.0);
-        assert_eq!(list_picker_height(8, 18.0, 3.0), 8.0 * 18.0 + 7.0 * 3.0);
-        assert_eq!(list_picker_height(30, 18.0, 3.0), list_picker_height(8, 18.0, 3.0));
-        assert_eq!(list_picker_height(0, 18.0, 3.0), 18.0);
-    }
-
-    #[test]
-    fn number_format_colors_resolve_named_and_indexed_rgb() {
-        use gridcraft_engine::numfmt::FormatColor as F;
-        assert_eq!(numfmt_color(F::Green), Color32::from_rgb(0, 255, 0));
-        assert_eq!(numfmt_color(F::Indexed(1)), Color32::BLACK);
-        assert_eq!(numfmt_color(F::Indexed(10)), Color32::from_rgb(0, 128, 0));
-        assert_eq!(numfmt_color(F::Indexed(46)), Color32::from_rgb(255, 102, 0));
-        assert_eq!(numfmt_color(F::Indexed(56)), Color32::from_rgb(51, 51, 51));
-        for index in [0, 57, 255] {
-            assert_eq!(numfmt_color(F::Indexed(index)), Color32::BLACK);
-        }
-    }
-
-    #[test]
-    fn wheel_zoom_steps_along_the_ladder_and_stops_at_100() {
-        for (from, zoom_in, to) in [
-            (100, true, 120),
-            (120, false, 100),
-            (100, false, 85),
-            // Between steps, the next one each way (Excel: 112% goes to 115% or 100%).
-            (112, true, 120),
-            (112, false, 100),
-            // A step less than 5% away is skipped…
-            (121, false, 100),
-            (86, false, 70),
-            (139, true, 170),
-            // …but never 100% or a limit.
-            (99, true, 100),
-            (101, false, 100),
-            (96, true, 100),
-            (385, true, 400),
-            (11, false, 10),
-            (400, true, 400),
-            (10, false, 10),
-            // Out-of-range zooms (from a file) come into range first.
-            (5, true, 12),
-            (1000, false, 340),
-            (0, false, 10),
-            (u16::MAX, true, 400),
-        ] {
-            assert_eq!(wheel_zoom_step(from, zoom_in), to, "{from}% {}", if zoom_in { "in" } else { "out" });
-        }
-        // Every step on the ladder is 15–25% from the next, and a notch in then out returns.
-        // (The glide between steps is `zoom_glide_moves_by_ratio_and_always_arrives`.)
-        for w in WHEEL_ZOOM_LADDER.windows(2) {
-            let ratio = f32::from(w[1]) / f32::from(w[0]);
-            assert!((1.15..=1.25).contains(&ratio), "{w:?}");
-            assert_eq!(wheel_zoom_step(w[0], true), w[1]);
-            assert_eq!(wheel_zoom_step(w[1], false), w[0]);
-        }
-    }
-
-    #[test]
-    fn zoom_glide_moves_by_ratio_and_always_arrives() {
-        // A third of the way per frame, as at 60 frames a second.
-        for (from, to) in [(100, 120), (120, 100), (10, 12), (340, 400), (400, 10), (85, 100)] {
-            let (mut z, mut frames) = (from, 0);
-            while z != to {
-                let next = zoom_glide_step(z, to, 0.32);
-                assert!(next != z && next.abs_diff(to) < z.abs_diff(to), "{from} → {to}: {z} then {next}");
-                z = next;
-                frames += 1;
-                assert!(frames < 40, "{from} → {to} arrives");
-            }
-            assert!(frames >= 2, "{from} → {to} glides over more than one frame ({frames})");
-        }
-        assert_eq!(zoom_glide_step(100, 120, 0.32), 106, "a third of the way by ratio");
-        assert_eq!(zoom_glide_step(120, 100, 0.32), 113);
-        // No progress asked or nonsense: still a percent closer, or straight there.
-        assert_eq!(zoom_glide_step(100, 120, 0.0), 101);
-        assert_eq!(zoom_glide_step(120, 100, f32::NAN), 100);
-        assert_eq!(zoom_glide_step(100, 120, 5.0), 120);
-        assert_eq!(zoom_glide_step(120, 120, 0.5), 120);
-        assert_eq!(zoom_glide_step(0, 10, 0.5), 3);
-    }
-
-    #[test]
-    fn center_across_run_stops_at_first_non_continuing_column() {
-        assert_eq!(center_across_end(0, 20, |c| c <= 2), 2);
-        assert_eq!(center_across_end(0, 20, |_| false), 0);
-        assert_eq!(center_across_end(0, 1, |_| true), 1);
-    }
-
-    #[test]
-    fn conditional_number_format_reaches_the_cell_text() {
-        // #1163: a rule's number format replaces the cell's own; unmatched cells keep theirs.
-        let mut session = gridcraft_engine::Session::new();
-        session.new_workbook();
-        session.execute("range.setValues", json!({"range": "A1", "values": [[1], [3], [4]]})).unwrap();
-        session.execute("home.numberFormat", json!({"range": "A3", "code": "0.0"})).unwrap();
-        let rule = json!({"type": "cellIs", "operator": "greater", "value": "2", "style": {"num_fmt": "0.00"}});
-        session.execute("home.conditionalFormat", json!({"range": "A1:A3", "rule": rule})).unwrap();
-        let wb = session.active().unwrap().wb.clone();
-        let sh = wb.sheet(0).unwrap();
-        let mut cf = CfCache::new();
-        let text = |row: u32, cf: &mut CfCache| {
-            let c = CellRef::new(row, 0);
-            let (lk, _) = look(&wb, 0, sh, c, cf);
-            display_text(&wb, sh, c, &sh.value(c), &lk.style, 200.0, 7.0).0
-        };
-        assert_eq!(text(0, &mut cf), "1");
-        assert_eq!(text(1, &mut cf), "3.00");
-        assert_eq!(text(2, &mut cf), "4.00");
-    }
-
-    #[test]
-    fn filter_menu_uses_the_table_whose_header_was_clicked() {
-        use gridcraft_engine::model::Table;
-        let table = |id: u32, r0: u32, r1: u32| Table {
-            id,
-            name: format!("T{id}"),
-            range: RangeRef::new(CellRef::new(r0, 0), CellRef::new(r1, 0)),
-            header_row: true,
-            totals_row: false,
-            columns: vec![],
-            style: String::new(),
-            banded_rows: true,
-            banded_cols: false,
-            first_col: false,
-            last_col: false,
-            filter_button: true,
-            filter: vec![],
-            table_type: None,
-            connection_id: None,
-        };
-        let mut sh = Sheet::new("S");
-        sh.tables.push(table(1, 0, 2));
-        sh.tables.push(table(2, 4, 7));
-        assert_eq!(filter_table_range(&sh, 0, 4), Some(sh.tables[1].range));
-        assert_eq!(filter_table_range(&sh, 0, 0), Some(sh.tables[0].range));
-        assert_eq!(filter_table_range(&sh, 1, 4), None);
-    }
-
-    #[test]
-    fn cell_text_y_moves_monotonically_in_standard_and_tall_rows() {
-        let rect_std = Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 20.0));
-        let gh = 18.5;
-        let z = 1.0;
-
-        let y_top_std = cell_text_y(VAlign::Top, rect_std, gh, z);
-        let y_center_std = cell_text_y(VAlign::Center, rect_std, gh, z);
-        let y_bottom_std = cell_text_y(VAlign::Bottom, rect_std, gh, z);
-
-        assert!(y_top_std < y_center_std, "Top ({y_top_std}) must be higher than Center ({y_center_std})");
-        assert!(y_center_std < y_bottom_std, "Center ({y_center_std}) must be higher than Bottom ({y_bottom_std})");
-
-        // Verify tall row (e.g. 40px)
-        let rect_tall = Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 40.0));
-        let y_top_tall = cell_text_y(VAlign::Top, rect_tall, gh, z);
-        let y_center_tall = cell_text_y(VAlign::Center, rect_tall, gh, z);
-        let y_bottom_tall = cell_text_y(VAlign::Bottom, rect_tall, gh, z);
-
-        assert!(y_top_tall < y_center_tall, "Top ({y_top_tall}) must be higher than Center ({y_center_tall})");
-        assert!(y_center_tall < y_bottom_tall, "Center ({y_center_tall}) must be higher than Bottom ({y_bottom_tall})");
-    }
-
-    #[test]
-    fn wrapped_cell_text_y_positions_correctly_and_safeguards_overflow() {
-        let rect = Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 40.0));
-        let gh = 30.0;
-        let z = 1.0;
-
-        let y_top = wrapped_cell_text_y(VAlign::Top, rect, gh, z);
-        let y_center = wrapped_cell_text_y(VAlign::Center, rect, gh, z);
-        let y_bottom = wrapped_cell_text_y(VAlign::Bottom, rect, gh, z);
-
-        assert!(y_top < y_center);
-        assert!(y_center < y_bottom);
-
-        // Overflow case: gh exceeds rect height; Top still starts inside the cell.
-        let gh_overflow = 60.0;
-        let y_top_ovf = wrapped_cell_text_y(VAlign::Top, rect, gh_overflow, z);
-        assert!(y_top_ovf >= rect.top());
-    }
-
-    #[test]
-    fn wrapped_cell_text_y_keeps_vertical_alignment_when_text_is_taller_than_the_row() {
-        // A default-height row holding three wrapped lines.
-        let rect = Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 20.0));
-        let (gh, z) = (60.0, 1.0);
-        let y_top = wrapped_cell_text_y(VAlign::Top, rect, gh, z);
-        let y_center = wrapped_cell_text_y(VAlign::Center, rect, gh, z);
-        let y_bottom = wrapped_cell_text_y(VAlign::Bottom, rect, gh, z);
-        // Taller text overflows upward for Bottom and both ways for Center (the cell clips it).
-        assert!((y_top - 1.5).abs() < 0.01, "Top starts at the top edge, got {y_top}");
-        assert!((y_center + gh / 2.0 - rect.center().y).abs() < 0.01, "Center is centred, got {y_center}");
-        assert!((y_bottom + gh - (rect.bottom() - 1.5)).abs() < 0.01, "Bottom ends at the bottom edge, got {y_bottom}");
-    }
-
-    /// The screen box of a galley of `size` drawn at `pos` turned by `angle` about `pos`, as egui
-    /// draws a rotated `TextShape`.
-    fn rotated_box(pos: Pos2, size: egui::Vec2, angle: f32) -> Rect {
-        let rot = egui::emath::Rot2::from_angle(angle);
-        let pts = [vec2(0.0, 0.0), vec2(size.x, 0.0), vec2(0.0, size.y), size].map(|v| pos + rot * v);
-        Rect::from_points(&pts)
-    }
-
-    #[test]
-    fn rotated_text_box_follows_the_cell_alignment() {
-        // A tall, narrow merged block (one 3-character column over four 60pt rows).
-        let rect = Rect::from_min_max(pos2(10.0, 20.0), pos2(40.0, 340.0));
-        let size = vec2(90.0, 15.0);
-        let pad = 2.5;
-        let near = |a: f32, b: f32| (a - b).abs() < 0.01;
-        for deg in [90i16, -90, 45, -45] {
-            let angle = -(deg as f32).to_radians();
-            for v in [VAlign::Top, VAlign::Center, VAlign::Bottom] {
-                for h in [HAlign::Left, HAlign::Center, HAlign::Right] {
-                    let bb = rotated_box(rotated_text_pos(rect, size, angle, h, v, pad, 0.0), size, angle);
-                    let what = format!("{deg}° {h:?}/{v:?}: {bb:?} in {rect:?}");
-                    assert!(near(bb.height(), rotated_box(Pos2::ZERO, size, angle).height()), "{what}");
-                    assert!(bb.top() >= rect.top() && bb.bottom() <= rect.bottom(), "{what}");
-                    // A narrow column can't hold a 45° line across: only check where it fits.
-                    let fits_x = bb.width() <= rect.width() - 2.0 * pad;
-                    match h {
-                        HAlign::Left => assert!(near(bb.left(), rect.left() + pad), "{what}"),
-                        HAlign::Right => assert!(near(bb.right(), rect.right() - pad), "{what}"),
-                        _ => assert!(near(bb.center().x, rect.center().x), "{what}"),
-                    }
-                    if fits_x {
-                        assert!(bb.left() >= rect.left() && bb.right() <= rect.right(), "{what}");
-                    }
-                    match v {
-                        VAlign::Top => assert!(near(bb.top(), rect.top() + pad), "{what}"),
-                        VAlign::Center => assert!(near(bb.center().y, rect.center().y), "{what}"),
-                        // Bottom is the default: downward text keeps starting at the top, as before.
-                        _ if deg < 0 => assert!(near(bb.top(), rect.top() + pad), "{what}"),
-                        _ => assert!(near(bb.bottom(), rect.bottom() - pad), "{what}"),
-                    }
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn upright_text_with_default_alignment_keeps_its_place() {
-        let rect = Rect::from_min_max(pos2(10.0, 20.0), pos2(40.0, 340.0));
-        let size = vec2(90.0, 15.0);
-        let pad = 2.5;
-        let near = |a: Pos2, b: Pos2| (a - b).length() < 0.01;
-        // Upward text starts at the bottom-left corner, downward text one block-height in from the top-left.
-        let up = rotated_text_pos(rect, size, -std::f32::consts::FRAC_PI_2, HAlign::General, VAlign::Bottom, pad, 0.0);
-        assert!(near(up, pos2(rect.left() + pad, rect.bottom() - pad)), "{up:?}");
-        let down = rotated_text_pos(rect, size, std::f32::consts::FRAC_PI_2, HAlign::General, VAlign::Bottom, pad, 0.0);
-        assert!(near(down, pos2(rect.left() + pad + size.y, rect.top() + pad)), "{down:?}");
-    }
-
-    #[test]
-    fn upward_text_with_middle_align_is_centred_in_a_merged_block() {
-        // Issue #435: "Licht Strom (?)" turned up in A1:A4 with Middle Align was drawn at the bottom.
-        let rect = Rect::from_min_max(pos2(10.0, 20.0), pos2(40.0, 340.0));
-        let size = vec2(90.0, 15.0);
-        let angle = -std::f32::consts::FRAC_PI_2;
-        let bb = rotated_box(rotated_text_pos(rect, size, angle, HAlign::Center, VAlign::Center, 2.5, 0.0), size, angle);
-        assert!((bb.center().y - rect.center().y).abs() < 0.01, "{bb:?} not centred in {rect:?}");
-        assert!((bb.center().x - rect.center().x).abs() < 0.01, "{bb:?} not centred in {rect:?}");
-    }
-}
-
-#[cfg(test)]
-mod pane_tests {
-    use super::*;
-
-    fn rng(r0: u32, c0: u32, r1: u32, c1: u32) -> RangeRef {
-        RangeRef::new(CellRef::new(r0, c0), CellRef::new(r1, c1))
-    }
-
-    #[test]
-    fn selection_in_scrolling_pane_is_not_drawn_in_frozen_pane() {
-        // Frozen: 2 rows and 2 columns; the scrolling pane shows rows 2..=20 and columns 2..=10.
-        let frozen_cols = ((2, 20), (0, 1));
-        let frozen_rows = ((0, 1), (2, 10));
-        let corner = ((0, 1), (0, 1));
-        let scrolled = ((2, 20), (2, 10));
-        let sel = rng(5, 4, 7, 6);
-        assert!(range_in_pane(sel, scrolled.0, scrolled.1));
-        assert!(!range_in_pane(sel, frozen_cols.0, frozen_cols.1));
-        assert!(!range_in_pane(sel, frozen_rows.0, frozen_rows.1));
-        assert!(!range_in_pane(sel, corner.0, corner.1));
-    }
-
-    #[test]
-    fn ctrl_click_on_a_selected_header_deselects_it() {
-        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
-        assert_eq!(toggled_ranges(s(&["A:A", "C:C"]), "C:C".into(), true), s(&["A:A"]));
-        assert_eq!(toggled_ranges(s(&["A:A"]), "C:C".into(), true), s(&["A:A", "C:C"]));
-        assert_eq!(toggled_ranges(s(&["A:A"]), "A:A".into(), true), s(&["A:A"]));
-        assert_eq!(toggled_ranges(s(&["A1", "B2", "3:3"]), "B2".into(), true), s(&["A1", "3:3"]));
-        assert_eq!(toggled_ranges(s(&["A:A", "C:C"]), "C:C".into(), false), s(&["C:C"]));
-    }
-
-    #[test]
-    fn selection_across_the_freeze_line_is_drawn_in_both_panes() {
-        let sel = rng(5, 0, 7, 6);
-        assert!(range_in_pane(sel, (2, 20), (0, 1)));
-        assert!(range_in_pane(sel, (2, 20), (2, 10)));
-    }
-
-    /// Two frozen rows and columns, scrolled right so that columns C:E lie under the frozen columns.
-    fn frozen_geo(sh: &mut Sheet) -> Geo {
-        sh.freeze = Some((2, 2));
-        let scroll = vec2(3.0 * sh.default_col_width + 8.0, 0.0);
-        Geo::new(sh, Rect::from_min_size(pos2(0.0, 0.0), vec2(800.0, 600.0)), scroll)
-    }
-
-    #[test]
-    fn the_edge_just_past_a_hidden_line_unhides_it() {
-        let mut sh = Sheet::new("S");
-        sh.cols.entry(11).or_default().hidden = true; // L
-        sh.rows.entry(26).or_default().hidden = true; // 27
-        let geo = Geo::new(&sh, Rect::from_min_size(pos2(0.0, 0.0), vec2(2000.0, 1200.0)), vec2(0.0, 0.0));
-        let x = geo.x(&sh, 12); // between K and M
-        assert_eq!(hidden_col_edge(&geo, &sh, x + 2.0), Some(11));
-        assert_eq!(hidden_col_edge(&geo, &sh, x - 2.0), None); // K's own edge
-        assert_eq!(hidden_col_edge(&geo, &sh, geo.x(&sh, 5)), None);
-        let y = geo.y(&sh, 27); // between 26 and 28
-        assert_eq!(hidden_row_edge(&geo, &sh, y + 2.0), Some(26));
-        assert_eq!(hidden_row_edge(&geo, &sh, y - 2.0), None);
-    }
-
-    #[test]
-    fn headers_mark_the_edges_next_to_hidden_lines() {
-        let mut sh = Sheet::new("S");
-        sh.cols.entry(0).or_default().hidden = true; // A
-        sh.cols.entry(11).or_default().hidden = true; // L
-        sh.rows.entry(26).or_default().hidden = true; // 27
-        let col = |c| hidden_around(c, |i| sh.col_width(i));
-        assert_eq!(col(1), (true, false)); // B, after hidden A
-        assert_eq!(col(10), (false, true)); // K
-        assert_eq!(col(12), (true, false)); // M
-        assert_eq!(col(5), (false, false));
-        let row = |r| hidden_around(r, |i| sh.row_height(i));
-        assert_eq!(row(25), (false, true));
-        assert_eq!(row(27), (true, false));
-        assert_eq!(row(0), (false, false));
-    }
-
-    #[test]
-    fn overlays_skip_cells_scrolled_under_the_frozen_columns() {
-        let mut sh = Sheet::new("S");
-        let geo = frozen_geo(&mut sh);
-        assert!(geo.hidden_under_frozen(&sh, CellRef::new(5, 2)));
-        assert!(geo.hidden_under_frozen(&sh, CellRef::new(5, 4)));
-        assert!(!geo.hidden_under_frozen(&sh, CellRef::new(5, 5)));
-        assert!(!geo.hidden_under_frozen(&sh, CellRef::new(5, 0)));
-        let unscrolled = Geo::new(&sh, geo.rect, vec2(0.0, 0.0));
-        assert!(!unscrolled.hidden_under_frozen(&sh, CellRef::new(5, 2)));
-    }
-
-    #[test]
-    fn ranges_are_clipped_to_the_panes_that_hold_them() {
-        let mut sh = Sheet::new("S");
-        let geo = frozen_geo(&mut sh);
-        let split = pos2(geo.cells.left() + geo.frozen_w, geo.cells.top() + geo.frozen_h);
-        assert_eq!(geo.range_panes(rng(5, 3, 7, 6)), [Rect::from_min_max(split, geo.cells.max)]);
-        assert_eq!(geo.range_panes(rng(5, 0, 7, 6)).len(), 2);
-        assert_eq!(geo.range_panes(rng(0, 0, 7, 6)).len(), 4);
-        assert_eq!(geo.range_panes(rng(0, 0, 1, 1)), [Rect::from_min_max(geo.cells.min, split)]);
-        // The fill handle of D6:E7 sits over the frozen columns, where nothing of it is shown.
-        let handle = geo.range_rect(&sh, rng(5, 3, 6, 4)).right_bottom();
-        assert!(handle.x < split.x);
-        assert!(!geo.range_panes(rng(6, 4, 6, 4)).iter().any(|r| r.contains(handle)));
-    }
-}
-
-#[cfg(test)]
-mod outline_band_tests {
-    use super::*;
-
-    #[test]
-    fn whole_column_outline_keeps_left_and_right_sides_near_viewport() {
-        let clip = Rect::from_min_max(pos2(0.0, 0.0), pos2(800.0, 600.0));
-        let col = Rect::from_min_max(pos2(100.0, 40.0), pos2(180.0, 20_971_540.0));
-        let sides = outline_bands(col, 2.0, clip);
-        // Left, right and top (in view); the bottom is 20 million points away.
-        assert_eq!(sides.len(), 3);
-        assert!(sides.iter().all(|s| s.bottom() <= clip.bottom() + 4.0 + f32::EPSILON));
-        assert!(sides.iter().any(|s| s.left() < 100.0 && s.right() > 100.0 && s.height() > 500.0));
-        assert!(sides.iter().any(|s| s.left() < 180.0 && s.right() > 180.0 && s.height() > 500.0));
-    }
-
-    #[test]
-    fn outline_outside_the_view_and_non_finite_draw_nothing() {
-        let clip = Rect::from_min_max(pos2(0.0, 0.0), pos2(800.0, 600.0));
-        assert!(outline_bands(Rect::from_min_max(pos2(900.0, 0.0), pos2(950.0, 20.0)), 2.0, clip).is_empty());
-        assert!(outline_bands(Rect::from_min_max(pos2(f32::NAN, 0.0), pos2(1.0, 1.0)), 2.0, clip).is_empty());
-    }
-}
+mod tests;
